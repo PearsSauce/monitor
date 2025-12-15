@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"io"
+	"log"
 	"net"
 	"net/http"
 	"strings"
@@ -19,6 +20,7 @@ import (
 type Service struct {
 	db  *sql.DB
 	cfg config.Config
+	evt chan<- Update
 }
 
 func NewService(db *sql.DB, cfg config.Config) *Service {
@@ -30,31 +32,111 @@ func (s *Service) DB() *sql.DB { return s.db }
 func (s *Service) SetDB(newdb *sql.DB) { s.db = newdb }
 
 func (s *Service) StartScheduler() {
+	log.Printf("任务调度启动")
+	go func() {
+		for {
+			now := time.Now()
+			next := time.Date(now.Year(), now.Month(), now.Day(), 4, 0, 0, 0, now.Location())
+			if !next.After(now) {
+				next = next.Add(24 * time.Hour)
+			}
+			time.Sleep(next.Sub(now))
+			_ = s.RunSSLCheckAll()
+			s.CleanupOldResults()
+			log.Printf("每日任务完成：SSL检测与数据清理")
+		}
+	}()
+	loops := map[int]struct {
+		interval time.Duration
+		stop     chan struct{}
+	}{}
 	for {
 		monitors, err := s.ListMonitors()
 		if err != nil {
 			time.Sleep(5 * time.Second)
 			continue
 		}
+		active := map[int]struct{}{}
 		for _, m := range monitors {
 			interval := time.Duration(m.IntervalSeconds) * time.Second
 			if interval <= 0 {
 				interval = s.cfg.DefaultCheckInterval
 			}
-			go s.runLoop(m.ID, interval)
+			active[m.ID] = struct{}{}
+			if lp, ok := loops[m.ID]; !ok {
+				stop := make(chan struct{})
+				loops[m.ID] = struct {
+					interval time.Duration
+					stop     chan struct{}
+				}{interval: interval, stop: stop}
+				go s.runLoopWithStop(m.ID, interval, stop)
+			} else if lp.interval != interval {
+				close(lp.stop)
+				stop := make(chan struct{})
+				loops[m.ID] = struct {
+					interval time.Duration
+					stop     chan struct{}
+				}{interval: interval, stop: stop}
+				go s.runLoopWithStop(m.ID, interval, stop)
+			}
+		}
+		for id, lp := range loops {
+			if _, ok := active[id]; !ok {
+				close(lp.stop)
+				delete(loops, id)
+			}
 		}
 		time.Sleep(60 * time.Second)
 	}
 }
 
-func (s *Service) runLoop(monitorID int, interval time.Duration) {
+func (s *Service) RunSSLCheckAll() error {
+	ms, err := s.ListMonitors()
+	if err != nil {
+		return err
+	}
+	for _, m := range ms {
+		if strings.HasPrefix(strings.ToLower(m.URL), "https") {
+			s.checkSSL(&m)
+		}
+	}
+	return nil
+}
+
+type Update struct {
+	MonitorID   int
+	CheckedAt   time.Time
+	Online      bool
+	StatusCode  int
+	ResponseMs  int
+	Error       string
+	EventType   string
+	Message     string
+	MonitorName string
+}
+
+func (s *Service) SetEventSink(ch chan<- Update) {
+	s.evt = ch
+}
+
+func (s *Service) CleanupOldResults() {
+	days := s.cfg.RetentionDays
+	if days <= 0 {
+		days = 30
+	}
+	_, _ = s.db.Exec(`DELETE FROM monitor_results WHERE checked_at < NOW() - ($1||' days')::interval`, days)
+}
+
+func (s *Service) runLoopWithStop(monitorID int, interval time.Duration, stop chan struct{}) {
 	t := time.NewTicker(interval)
 	defer t.Stop()
 	for {
-		if err := s.CheckMonitor(monitorID); err != nil {
-			// swallow error
+		select {
+		case <-t.C:
+			_ = s.CheckMonitor(monitorID)
+		case <-stop:
+			return
 		}
-		<-t.C
 	}
 }
 
@@ -106,17 +188,78 @@ func (s *Service) CheckMonitor(id int) error {
 
 	_, _ = s.db.Exec(`INSERT INTO monitor_results(monitor_id,online,status_code,response_ms,error)
 		VALUES($1,$2,$3,$4,$5)`, m.ID, online, statusCode, int(duration.Milliseconds()), nullIfEmpty(errStr))
+	log.Printf("监控结果 name=%s online=%v code=%d 耗时=%dms 错误=%s", m.Name, online, statusCode, int(duration.Milliseconds()), errStr)
 
 	now := time.Now()
 	_, _ = s.db.Exec(`UPDATE monitors SET last_online=$1, last_checked_at=$2 WHERE id=$3`, online, now, m.ID)
 
-	if prev := m.LastOnline; prev != nil && *prev != online {
+	var lastReported sql.NullBool
+	var onStreak int
+	var offStreak int
+	_ = s.db.QueryRow(`SELECT last_reported_online, online_streak, offline_streak FROM monitor_state WHERE monitor_id=$1`, m.ID).
+		Scan(&lastReported, &onStreak, &offStreak)
+	if online {
+		onStreak++
+		offStreak = 0
+	} else {
+		offStreak++
+		onStreak = 0
+	}
+	_, _ = s.db.Exec(`INSERT INTO monitor_state(monitor_id,last_reported_online,online_streak,offline_streak)
+		VALUES($1,$2,$3,$4)
+		ON CONFLICT (monitor_id) DO UPDATE SET online_streak=EXCLUDED.online_streak, offline_streak=EXCLUDED.offline_streak`, m.ID, lastReported.Bool, onStreak, offStreak)
+	shouldNotify := false
+	if !lastReported.Valid {
+		shouldNotify = true
+		_, _ = s.db.Exec(`UPDATE monitor_state SET last_reported_online=$1 WHERE monitor_id=$2`, online, m.ID)
+	} else if lastReported.Bool != online {
+		if online && onStreak >= s.cfg.FlapThreshold {
+			shouldNotify = true
+			_, _ = s.db.Exec(`UPDATE monitor_state SET last_reported_online=true WHERE monitor_id=$1`, m.ID)
+		}
+		if !online && offStreak >= s.cfg.FlapThreshold {
+			shouldNotify = true
+			_, _ = s.db.Exec(`UPDATE monitor_state SET last_reported_online=false WHERE monitor_id=$1`, m.ID)
+		}
+	}
+	if shouldNotify {
 		notify.SendResend(s.cfg.ResendAPIKey, "monitor alert", s.alertEmailTo(), s.buildStatusChangeEmail(m, online, statusCode, errStr))
 		_, _ = s.db.Exec(`INSERT INTO notifications(monitor_id,type,message) VALUES($1,$2,$3)`, m.ID, "status_change", s.buildStatusChangeEmail(m, online, statusCode, errStr))
+		if s.evt != nil {
+			msg := s.buildStatusChangeEmail(m, online, statusCode, errStr)
+			select {
+			case s.evt <- Update{
+				MonitorID:   m.ID,
+				CheckedAt:   now,
+				Online:      online,
+				StatusCode:  statusCode,
+				ResponseMs:  int(duration.Milliseconds()),
+				Error:       errStr,
+				EventType:   "status_change",
+				Message:     msg,
+				MonitorName: m.Name,
+			}:
+			default:
+			}
+		}
 	}
 
 	if strings.HasPrefix(strings.ToLower(m.URL), "https") {
 		s.checkSSL(&m)
+	}
+	if s.evt != nil {
+		select {
+		case s.evt <- Update{
+			MonitorID:   m.ID,
+			CheckedAt:   now,
+			Online:      online,
+			StatusCode:  statusCode,
+			ResponseMs:  int(duration.Milliseconds()),
+			Error:       errStr,
+			MonitorName: m.Name,
+		}:
+		default:
+		}
 	}
 	return nil
 }
@@ -149,6 +292,22 @@ func (s *Service) checkSSL(m *model.Monitor) {
 		msg := s.buildSSLExpiryEmail(*m, daysLeft, expires)
 		notify.SendResend(s.cfg.ResendAPIKey, "SSL 证书到期提醒", s.alertEmailTo(), msg)
 		_, _ = s.db.Exec(`INSERT INTO notifications(monitor_id,type,message) VALUES($1,$2,$3)`, m.ID, "ssl_expiry", msg)
+		if s.evt != nil {
+			select {
+			case s.evt <- Update{
+				MonitorID:   m.ID,
+				CheckedAt:   time.Now(),
+				Online:      true,
+				StatusCode:  0,
+				ResponseMs:  0,
+				Error:       "",
+				EventType:   "ssl_expiry",
+				Message:     msg,
+				MonitorName: m.Name,
+			}:
+			default:
+			}
+		}
 	}
 }
 

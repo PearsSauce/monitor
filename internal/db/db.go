@@ -13,13 +13,13 @@ func Open(dsn string) (*sql.DB, error) {
 func Migrate(db *sql.DB) error {
 	stmts := []string{
 		`CREATE TABLE IF NOT EXISTS monitor_groups (
-			id SERIAL PRIMARY KEY,
+			id BIGINT PRIMARY KEY,
 			name TEXT NOT NULL,
 			icon TEXT,
 			color TEXT
 		);`,
 		`CREATE TABLE IF NOT EXISTS monitors (
-			id SERIAL PRIMARY KEY,
+			id BIGINT PRIMARY KEY,
 			name TEXT NOT NULL,
 			url TEXT NOT NULL,
 			method TEXT NOT NULL DEFAULT 'GET',
@@ -28,29 +28,35 @@ func Migrate(db *sql.DB) error {
 			expected_status_min INT DEFAULT 200,
 			expected_status_max INT DEFAULT 299,
 			keyword TEXT,
-			group_id INT REFERENCES monitor_groups(id) ON DELETE SET NULL,
+			group_id BIGINT REFERENCES monitor_groups(id) ON DELETE SET NULL,
 			interval_seconds INT NOT NULL DEFAULT 60,
 			last_online BOOLEAN,
 			last_checked_at TIMESTAMPTZ
 		);`,
 		`CREATE TABLE IF NOT EXISTS monitor_results (
 			id BIGSERIAL PRIMARY KEY,
-			monitor_id INT NOT NULL REFERENCES monitors(id) ON DELETE CASCADE,
+			monitor_id BIGINT NOT NULL REFERENCES monitors(id) ON DELETE CASCADE,
 			checked_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 			online BOOLEAN NOT NULL,
 			status_code INT,
 			response_ms INT,
 			error TEXT
 		);`,
+		`CREATE TABLE IF NOT EXISTS monitor_state (
+			monitor_id BIGINT PRIMARY KEY REFERENCES monitors(id) ON DELETE CASCADE,
+			last_reported_online BOOLEAN,
+			online_streak INT NOT NULL DEFAULT 0,
+			offline_streak INT NOT NULL DEFAULT 0
+		);`,
 		`CREATE TABLE IF NOT EXISTS ssl_info (
-			monitor_id INT PRIMARY KEY REFERENCES monitors(id) ON DELETE CASCADE,
+			monitor_id BIGINT PRIMARY KEY REFERENCES monitors(id) ON DELETE CASCADE,
 			expires_at TIMESTAMPTZ,
 			issuer TEXT,
 			days_left INT
 		);`,
 		`CREATE TABLE IF NOT EXISTS notifications (
 			id BIGSERIAL PRIMARY KEY,
-			monitor_id INT NOT NULL REFERENCES monitors(id) ON DELETE CASCADE,
+			monitor_id BIGINT NOT NULL REFERENCES monitors(id) ON DELETE CASCADE,
 			created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 			type TEXT NOT NULL,
 			message TEXT
@@ -69,6 +75,31 @@ func Migrate(db *sql.DB) error {
 			alert_before_days INT,
 			check_interval_seconds INT
 		);`,
+		// Alter existing columns to BIGINT for snowflake IDs (safe if already BIGINT)
+		`DO $$
+		BEGIN
+			IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='monitor_groups' AND column_name='id' AND data_type='integer') THEN
+				ALTER TABLE monitor_groups ALTER COLUMN id TYPE BIGINT;
+			END IF;
+			IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='monitors' AND column_name='id' AND data_type='integer') THEN
+				ALTER TABLE monitors ALTER COLUMN id TYPE BIGINT;
+			END IF;
+			IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='monitors' AND column_name='group_id' AND data_type='integer') THEN
+				ALTER TABLE monitors ALTER COLUMN group_id TYPE BIGINT;
+			END IF;
+			IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='monitor_results' AND column_name='monitor_id' AND data_type='integer') THEN
+				ALTER TABLE monitor_results ALTER COLUMN monitor_id TYPE BIGINT;
+			END IF;
+			IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='monitor_state' AND column_name='monitor_id' AND data_type='integer') THEN
+				ALTER TABLE monitor_state ALTER COLUMN monitor_id TYPE BIGINT;
+			END IF;
+			IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='ssl_info' AND column_name='monitor_id' AND data_type='integer') THEN
+				ALTER TABLE ssl_info ALTER COLUMN monitor_id TYPE BIGINT;
+			END IF;
+			IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='notifications' AND column_name='monitor_id' AND data_type='integer') THEN
+				ALTER TABLE notifications ALTER COLUMN monitor_id TYPE BIGINT;
+			END IF;
+		END $$;`,
 	}
 	for _, s := range stmts {
 		if _, err := db.Exec(s); err != nil {

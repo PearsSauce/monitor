@@ -12,6 +12,9 @@ type Config struct {
 	ResendAPIKey         string
 	AlertBeforeDays      int
 	DefaultCheckInterval time.Duration
+	AdminPassword        string
+	RetentionDays        int
+	FlapThreshold        int
 }
 
 func Load() Config {
@@ -21,6 +24,9 @@ func Load() Config {
 	resend := getenvDefault("RESEND_API_KEY", "")
 	alertDays := getenvIntDefault("ALERT_BEFORE_DAYS", 14)
 	intervalSec := getenvIntDefault("CHECK_INTERVAL_SECONDS", 60)
+	adminPw := getenvDefault("ADMIN_PASSWORD", "")
+	retention := getenvIntDefault("RETENTION_DAYS", 30)
+	flap := getenvIntDefault("FLAP_THRESHOLD", 2)
 
 	return Config{
 		Addr:                 addr,
@@ -28,6 +34,9 @@ func Load() Config {
 		ResendAPIKey:         resend,
 		AlertBeforeDays:      alertDays,
 		DefaultCheckInterval: time.Duration(intervalSec) * time.Second,
+		AdminPassword:        adminPw,
+		RetentionDays:        retention,
+		FlapThreshold:        flap,
 	}
 }
 

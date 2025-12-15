@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import { Button, Card, Divider, Drawer, Form, Grid, Input, InputNumber, Message, Select, Space, Switch, Table, Tag, Typography } from '@arco-design/web-react'
+import { Button, Card, Divider, Drawer, Form, Grid, Input, InputNumber, Message, Modal, Select, Space, Switch, Table, Tag, Typography } from '@arco-design/web-react'
 import { IconMoonFill, IconSun, IconSync } from '@arco-design/web-react/icon'
-import { createGroup, createMonitor, deleteGroup, getGroups, getHistory, getHistoryByDay, getMonitors, getSSL, getSetupState, postSetup, updateGroup, updateMonitor } from './api'
+import { createGroup, createMonitor, deleteGroup, getGroups, getHistory, getHistoryByDay, getMonitors, getSSL, getSetupState, postSetup, updateGroup, updateMonitor, setAdminPassword, getSettings, updateSettings, verifyAdmin, getNotifications } from './api'
 
 type Monitor = {
   id: number
@@ -28,6 +28,7 @@ type HistoryItem = {
 }
 type Group = { id:number; name:string; icon?:string; color?:string }
 type SSLInfo = { expires_at?:string; issuer?:string; days_left?:number } | null
+type NotificationItem = { id:number; monitor_id:number; created_at:string; type:string; message:string; monitor_name:string }
 
 function useDarkMode() {
   const [dark, setDark] = useState<boolean>(false)
@@ -45,13 +46,13 @@ export default function App() {
   const [groups, setGroups] = useState<Group[]>([])
   const [groupFilter, setGroupFilter] = useState<number | 'all'>('all')
   const [sslMap, setSslMap] = useState<Record<number, SSLInfo>>({})
-  const [showForm, setShowForm] = useState(false)
-  const [editing, setEditing] = useState<Monitor | null>(null)
+  const [latest, setLatest] = useState<Record<number, number>>({})
   const [showDetail, setShowDetail] = useState(false)
   const [detailId, setDetailId] = useState<number | null>(null)
   const { dark, setDark } = useDarkMode()
-  const [showGroups, setShowGroups] = useState(false)
+  const [showLogin, setShowLogin] = useState(false)
   const [needSetup, setNeedSetup] = useState(false)
+  const [notices, setNotices] = useState<NotificationItem[]>([])
 
   const fetchData = async () => {
     try {
@@ -63,6 +64,8 @@ export default function App() {
       const sslEntries: Record<number, SSLInfo> = {}
       await Promise.all((Array.isArray(data) ? data : []).map(async (m:Monitor) => { sslEntries[m.id] = await getSSL(m.id).catch(()=>null) }))
       setSslMap(sslEntries)
+      const ns = await getNotifications(20).catch(()=>[])
+      setNotices(Array.isArray(ns) ? ns : [])
     } catch (e: any) {
       Message.error(String(e?.message || e))
     } finally {
@@ -73,11 +76,44 @@ export default function App() {
   useEffect(() => {
     getSetupState().then(s=> { setNeedSetup(!s.installed); if (s.installed) fetchData() }).catch(()=>fetchData())
   }, [])
+  useEffect(() => {
+    const es = new EventSource('/api/events')
+    es.onmessage = (e) => {
+      try {
+        const ev = JSON.parse(e.data)
+        setList(prev => prev.map(m => m.id === ev.MonitorID ? { ...m, last_online: ev.Online, last_checked_at: new Date(ev.CheckedAt).toISOString() } : m))
+        setLatest(prev => ({ ...prev, [ev.MonitorID]: ev.ResponseMs }))
+        if (ev.EventType === 'status_change' || ev.EventType === 'ssl_expiry') {
+          const name = ev.MonitorName || (list.find(m=>m.id===ev.MonitorID)?.name) || ''
+          const it: NotificationItem = {
+            id: Date.now(),
+            monitor_id: ev.MonitorID,
+            created_at: new Date(ev.CheckedAt).toISOString(),
+            type: ev.EventType,
+            message: ev.Message || '',
+            monitor_name: name
+          }
+          setNotices(prev => [it, ...prev].slice(0, 50))
+        }
+      } catch {}
+    }
+    return () => { es.close() }
+  }, [])
 
   const filtered = useMemo(() => {
     if (groupFilter === 'all') return list
     return list.filter(i => i.group_id === groupFilter)
   }, [list, groupFilter])
+  const totalCount = useMemo(() => list.length, [list])
+  const onlineCount = useMemo(() => list.filter(i => !!i.last_online).length, [list])
+  const offlineCount = useMemo(() => Math.max(totalCount - onlineCount, 0), [totalCount, onlineCount])
+  const avgRespAll = useMemo(() => {
+    const values = Object.entries(latest).map(([id,v]) => ({ id: Number(id), v }))
+    const used = values.filter(x => typeof x.v === 'number' && x.v >= 0)
+    if (!used.length) return '-'
+    const sum = used.reduce((s, x) => s + x.v, 0)
+    return `${Math.round(sum / used.length)} ms`
+  }, [latest])
 
   const columns = [
     { title: '名称', dataIndex: 'name' },
@@ -95,6 +131,10 @@ export default function App() {
         if (!g) return '-'
         return <Tag style={{ backgroundColor: g.color || undefined, color: g.color ? '#fff' : undefined }}>{g.icon ? `${g.icon} ` : ''}{g.name}</Tag>
       }
+    },
+    {
+      title: '最近响应',
+      render: (_: any, r: Monitor) => <span>{typeof latest[r.id] === 'number' ? `${latest[r.id]} ms` : '-'}</span>
     },
     {
       title: '平均响应',
@@ -121,7 +161,6 @@ export default function App() {
       render: (_: any, r: Monitor) => (
         <Space>
           <Button size="mini" onClick={() => { setDetailId(r.id); setShowDetail(true) }}>详情</Button>
-          <Button size="mini" type="primary" onClick={() => { setEditing(r); setShowForm(true) }}>编辑</Button>
         </Space>
       )
     },
@@ -138,19 +177,62 @@ export default function App() {
               <Select.Option value={'all' as any}>全部</Select.Option>
               {(groups || []).map(g => <Select.Option key={g.id} value={g.id}>{g.name}</Select.Option>)}
             </Select>
-            <Button type="primary" onClick={() => { setEditing(null); setShowForm(true) }}>新建监控</Button>
-            <Button onClick={() => setShowGroups(true)}>管理分组</Button>
+            <Button onClick={() => setShowLogin(true)}>登录</Button>
             <Switch checked={dark} onChange={setDark} checkedIcon={<IconMoonFill />} uncheckedIcon={<IconSun />} />
           </Space>
         </Space>
         <Divider />
         <Card>
+          <Grid.Row gutter={16}>
+            <Grid.Col span={6}>
+              <Card>
+                <Typography.Text style={{ color: 'var(--color-text-1)' }}>总站点数</Typography.Text>
+                <div className="text-2xl mt-2 text-black dark:text-white">{totalCount}</div>
+              </Card>
+            </Grid.Col>
+            <Grid.Col span={6}>
+              <Card>
+                <Typography.Text style={{ color: 'var(--color-text-1)' }}>在线站点</Typography.Text>
+                <div className="text-2xl mt-2 text-green-600">{onlineCount}</div>
+              </Card>
+            </Grid.Col>
+            <Grid.Col span={6}>
+              <Card>
+                <Typography.Text style={{ color: 'var(--color-text-1)' }}>离线站点</Typography.Text>
+                <div className="text-2xl mt-2 text-red-600">{offlineCount}</div>
+              </Card>
+            </Grid.Col>
+            <Grid.Col span={6}>
+              <Card>
+                <Typography.Text style={{ color: 'var(--color-text-1)' }}>平均响应</Typography.Text>
+                <div className="text-2xl mt-2 text-blue-600">{avgRespAll}</div>
+              </Card>
+            </Grid.Col>
+          </Grid.Row>
+        </Card>
+        <Divider />
+        <Card>
+          <Typography.Title heading={6}>异常通知</Typography.Title>
+          {notices.length === 0 ? (
+            <div className="text-gray-500 text-sm">暂无异常通知</div>
+          ) : (
+            <Table rowKey="id" data={notices} pagination={false} columns={[
+              { title: '时间', dataIndex: 'created_at',
+                render: (v:any)=> (v ? new Date(v).toLocaleString() : '-') },
+              { title: '站点', dataIndex: 'monitor_name' },
+              { title: '类型', dataIndex: 'type',
+                render: (v:any)=> <Tag color={v==='status_change'?'red':v==='ssl_expiry'?'orange':'blue'}>{v}</Tag> },
+              { title: '消息', dataIndex: 'message' }
+            ] as any} />
+          )}
+        </Card>
+        <Divider />
+        <Card>
           <Table rowKey="id" columns={columns as any} data={filtered} pagination={false} />
         </Card>
-        <MonitorForm visible={showForm} onClose={() => setShowForm(false)} editing={editing} groups={groups} onOk={() => { setShowForm(false); fetchData() }} />
         {showDetail && detailId !== null && <DetailDrawer id={detailId} onClose={() => setShowDetail(false)} />}
-        <GroupManager visible={showGroups} onClose={() => setShowGroups(false)} groups={groups} onOk={() => { setShowGroups(false); fetchData() }} />
         {needSetup && <SetupWizard onDone={async () => { setNeedSetup(false); await fetchData() }} />}
+        {showLogin && <LoginModal onClose={()=>setShowLogin(false)} />}
       </div>
     </div>
   )
@@ -160,6 +242,19 @@ function AvgResponse({ monitorId }: { monitorId: number }) {
   const [items, setItems] = useState<HistoryItem[]>([])
   useEffect(() => {
     getHistory(monitorId, 30).then(setItems).catch(() => {})
+  }, [monitorId])
+  useEffect(() => {
+    const es = new EventSource('/api/events')
+    es.onmessage = (e) => {
+      try {
+        const ev = JSON.parse(e.data)
+        if (ev.MonitorID === monitorId) {
+          const hi: HistoryItem = { checked_at: ev.CheckedAt, online: ev.Online, status_code: ev.StatusCode, response_ms: ev.ResponseMs, error: ev.Error }
+          setItems(prev => [hi, ...prev].slice(0, 300))
+        }
+      } catch {}
+    }
+    return () => { es.close() }
   }, [monitorId])
   const avg = useMemo(() => {
     if (!items.length) return '-'
@@ -197,7 +292,7 @@ function MonitorForm({ visible, onClose, editing, groups, onOk }: { visible: boo
       })
     } else {
       form.resetFields()
-      form.setFieldsValue({ method: 'GET', expected_status_min: 200, expected_status_max: 299, interval_seconds: 60 })
+      form.setFieldsValue({ method: 'GET', expected_status_min: 200, expected_status_max: 299 })
     }
   }, [editing])
   const submit = async () => {
@@ -208,7 +303,7 @@ function MonitorForm({ visible, onClose, editing, groups, onOk }: { visible: boo
     onOk()
   }
   return (
-    <Drawer title={editing ? '编辑监控' : '新建监控'} visible={visible} onCancel={onClose} onOk={submit} okText="保存">
+    <Modal title={editing ? '编辑监控' : '新建监控'} visible={visible} onCancel={onClose} onOk={submit} okText="保存">
       <Form form={form} layout="vertical">
         <Form.Item label="名称" field="name" rules={[{ required: true }]}><Input /></Form.Item>
         <Form.Item label="URL" field="url" rules={[{ required: true }]}><Input /></Form.Item>
@@ -225,10 +320,34 @@ function MonitorForm({ visible, onClose, editing, groups, onOk }: { visible: boo
         <Form.Item label="关键词检测" field="keyword"><Input /></Form.Item>
         <Form.Item label="检查间隔(秒)" field="interval_seconds"><InputNumber min={10} /></Form.Item>
       </Form>
-    </Drawer>
+    </Modal>
   )
 }
 
+function SettingsModal({ onClose }: { onClose: () => void }) {
+  const [form] = Form.useForm()
+  useEffect(() => {
+    getSettings().then(s => {
+      form.setFieldsValue({ retention_days: s.retention_days, flap_threshold: s.flap_threshold, check_interval_seconds: s.check_interval_seconds })
+    }).catch(()=>{})
+  }, [])
+  const save = async () => {
+    const v = await form.validate()
+    await updateSettings({ retention_days: v.retention_days, flap_threshold: v.flap_threshold, check_interval_seconds: v.check_interval_seconds })
+    Message.success('设置已更新')
+    onClose()
+  }
+  return (
+    <Modal title="系统设置" visible={true} onCancel={onClose} onOk={save} okText="保存">
+      <Form form={form} layout="vertical">
+        <Form.Item label="数据保留天数" field="retention_days" rules={[{ required: true }]}><InputNumber min={1} /></Form.Item>
+        <Form.Item label="震荡次数阈值" field="flap_threshold" rules={[{ required: true }]}><InputNumber min={1} /></Form.Item>
+        <Form.Item label="默认检查间隔(秒)" field="check_interval_seconds" rules={[{ required: true }]}><InputNumber min={10} /></Form.Item>
+      </Form>
+      <div className="text-xs text-gray-500 mt-2">说明：超过保留天数的历史数据将自动清理；连续达到阈值后才触发上下线通知，避免频繁震荡。</div>
+    </Modal>
+  )
+}
 function DetailDrawer({ id, onClose }: { id: number; onClose: () => void }) {
   const [items, setItems] = useState<HistoryItem[]>([])
   const [days, setDays] = useState<DayAgg[]>([])
@@ -320,6 +439,32 @@ function SetupWizard({ onDone }: { onDone: () => void }) {
   )
 }
 
+function LoginModal({ onClose }: { onClose: () => void }) {
+  const [form] = Form.useForm()
+  const [loading, setLoading] = useState(false)
+  const submit = async () => {
+    const v = await form.validate()
+    try {
+      setLoading(true)
+      await verifyAdmin(v.password)
+      setAdminPassword(v.password)
+      Message.success('登录成功')
+      window.location.href = '/admin'
+    } catch (e:any) {
+      Message.error(String(e?.message || e))
+    } finally {
+      setLoading(false)
+    }
+  }
+  return (
+    <Modal title="管理员登录" visible={true} onCancel={onClose} onOk={submit} okText="登录" confirmLoading={loading}>
+      <Form form={form} layout="vertical">
+        <Form.Item label="密码" field="password" rules={[{ required: true }]}><Input.Password /></Form.Item>
+      </Form>
+    </Modal>
+  )
+}
+
 function GroupManager({ visible, onClose, groups, onOk }: { visible: boolean; onClose: () => void; groups: Group[]; onOk: () => void }) {
   const [form] = Form.useForm()
   const [editing, setEditing] = useState<Group | null>(null)
@@ -337,7 +482,7 @@ function GroupManager({ visible, onClose, groups, onOk }: { visible: boolean; on
     onOk()
   }
   return (
-    <Drawer title="分组管理" visible={visible} onCancel={onClose} onOk={save} okText="保存">
+    <Modal title="分组管理" visible={visible} onCancel={onClose} onOk={save} okText="保存" style={{ width: 800 }}>
       <Table rowKey="id" data={groups} pagination={false} columns={[
         { title: '名称', dataIndex: 'name' },
         { title: '图标', dataIndex: 'icon' },
@@ -351,6 +496,6 @@ function GroupManager({ visible, onClose, groups, onOk }: { visible: boolean; on
         <Form.Item label="图标" field="icon"><Input placeholder="例如：🔵" /></Form.Item>
         <Form.Item label="颜色" field="color"><Input placeholder="#22c55e" /></Form.Item>
       </Form>
-    </Drawer>
+    </Modal>
   )
 }
