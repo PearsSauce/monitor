@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { Button, Card, Divider, Drawer, Form, Grid, Input, InputNumber, Message, Modal, Select, Space, Switch, Table, Tag, Typography } from '@arco-design/web-react'
 import { IconMoonFill, IconSun, IconSync } from '@arco-design/web-react/icon'
-import { createGroup, createMonitor, deleteGroup, getGroups, getHistory, getHistoryByDay, getMonitors, getSSL, getSetupState, postSetup, updateGroup, updateMonitor, setAdminPassword, getSettings, updateSettings, verifyAdmin, getNotifications } from './api'
+import { createGroup, createMonitor, deleteGroup, getGroups, getHistory, getHistoryByDay, getMonitors, getSSL, getSetupState, postSetup, updateGroup, updateMonitor, setAdminPassword, getSettings, updateSettings, verifyAdmin, getNotifications, getLatestResult } from './api'
 
 type Monitor = {
   id: number
@@ -66,6 +66,12 @@ export default function App() {
       setSslMap(sslEntries)
       const ns = await getNotifications(20).catch(()=>[])
       setNotices(Array.isArray(ns) ? ns : [])
+      const latestMap: Record<number, number> = {}
+      await Promise.all((Array.isArray(data) ? data : []).map(async (m:Monitor) => {
+        const lr = await getLatestResult(m.id).catch(()=>null)
+        if (lr && typeof lr.response_ms === 'number') latestMap[m.id] = lr.response_ms
+      }))
+      setLatest(latestMap)
     } catch (e: any) {
       Message.error(String(e?.message || e))
     } finally {

@@ -115,3 +115,10 @@ export async function getNotifications(limit = 20) {
   const data = await res.json()
   return Array.isArray(data) ? data : []
 }
+
+export async function getLatestResult(id: number) {
+  const res = await fetch(`/api/monitors/${id}/latest`)
+  if (res.status === 404) return null
+  if (!res.ok) throw new Error('网络错误')
+  return res.json()
+}

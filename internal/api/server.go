@@ -357,6 +357,44 @@ func (s *Server) handleMonitorByID(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, out)
 		return
 	}
+	if len(parts) > 1 && parts[1] == "latest" {
+		if r.Method != http.MethodGet {
+			w.WriteHeader(405)
+			return
+		}
+		var (
+			t      time.Time
+			on     bool
+			sc     sql.NullInt64
+			ms     sql.NullInt64
+			errStr sql.NullString
+		)
+		err := s.s.DB().QueryRow(`SELECT checked_at, online, status_code, response_ms, error FROM monitor_results WHERE monitor_id=$1 ORDER BY checked_at DESC LIMIT 1`, id).
+			Scan(&t, &on, &sc, &ms, &errStr)
+		if err != nil {
+			http.Error(w, "not found", 404)
+			return
+		}
+		type resp struct {
+			CheckedAt  string `json:"checked_at"`
+			Online     bool   `json:"online"`
+			StatusCode int    `json:"status_code"`
+			ResponseMs int    `json:"response_ms"`
+			Error      string `json:"error"`
+		}
+		out := resp{CheckedAt: t.Format(time.RFC3339), Online: on}
+		if sc.Valid {
+			out.StatusCode = int(sc.Int64)
+		}
+		if ms.Valid {
+			out.ResponseMs = int(ms.Int64)
+		}
+		if errStr.Valid {
+			out.Error = errStr.String
+		}
+		writeJSON(w, out)
+		return
+	}
 	if len(parts) > 1 && parts[1] == "history" {
 		switch r.Method {
 		case http.MethodGet:
