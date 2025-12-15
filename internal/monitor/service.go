@@ -210,7 +210,6 @@ func (s *Service) CheckMonitor(id int) error {
 		ON CONFLICT (monitor_id) DO UPDATE SET online_streak=EXCLUDED.online_streak, offline_streak=EXCLUDED.offline_streak`, m.ID, lastReported.Bool, onStreak, offStreak)
 	shouldNotify := false
 	if !lastReported.Valid {
-		shouldNotify = true
 		_, _ = s.db.Exec(`UPDATE monitor_state SET last_reported_online=$1 WHERE monitor_id=$2`, online, m.ID)
 	} else if lastReported.Bool != online {
 		if online && onStreak >= s.cfg.FlapThreshold {
