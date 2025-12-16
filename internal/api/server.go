@@ -183,6 +183,7 @@ func (s *Server) handleMonitors(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), 500)
 			return
 		}
+		s.s.StartLoop(int(id))
 		go func() { _ = s.s.CheckMonitor(int(id)) }()
 		w.WriteHeader(201)
 	default:
@@ -273,7 +274,6 @@ func (s *Server) handleSetup(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "database connect error", 400)
 		return
 	}
-	defer tmpdb.Close()
 	if err := db.Migrate(tmpdb); err != nil {
 		http.Error(w, "migrate error", 500)
 		return
@@ -296,7 +296,11 @@ func (s *Server) handleSetup(w http.ResponseWriter, r *http.Request) {
 		"ALERT_BEFORE_DAYS=" + strconv.Itoa(defaultInt(in.AlertBeforeDays, 14)) + "\n" +
 		"CHECK_INTERVAL_SECONDS=" + strconv.Itoa(defaultInt(in.CheckIntervalSecond, 60)) + "\n"
 	_ = os.WriteFile(".env", []byte(env), 0600)
+	prev := s.s.DB()
 	s.s.SetDB(tmpdb)
+	if prev != nil {
+		_ = prev.Close()
+	}
 	w.WriteHeader(201)
 }
 
@@ -512,6 +516,7 @@ func (s *Server) handleMonitorByID(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), 500)
 			return
 		}
+		s.s.RestartLoop(id)
 		w.WriteHeader(204)
 	case http.MethodDelete:
 		if !s.adminOK(r) {
@@ -523,6 +528,7 @@ func (s *Server) handleMonitorByID(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), 500)
 			return
 		}
+		s.s.StopLoop(id)
 		w.WriteHeader(204)
 	default:
 		w.WriteHeader(405)

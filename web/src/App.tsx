@@ -378,7 +378,7 @@ function MonitorForm({ visible, onClose, editing, groups, onOk }: { visible: boo
           <Grid.Col span={12}><Form.Item label="期望状态码上限" field="expected_status_max"><InputNumber min={100} max={599} /></Form.Item></Grid.Col>
         </Grid.Row>
         <Form.Item label="关键词检测" field="keyword"><Input /></Form.Item>
-        <Form.Item label="检查间隔(秒)" field="interval_seconds"><InputNumber min={10} /></Form.Item>
+        <Form.Item label="检查间隔(秒)" field="interval_seconds"><InputNumber min={0} /></Form.Item>
       </Form>
     </Modal>
   )

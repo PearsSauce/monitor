@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"monitor/internal/config"
@@ -18,13 +19,23 @@ import (
 )
 
 type Service struct {
-	db  *sql.DB
-	cfg config.Config
-	evt chan<- Update
+	db      *sql.DB
+	cfg     config.Config
+	evt     chan<- Update
+	mu      sync.Mutex
+	running map[int]bool
+	loopsMu sync.Mutex
+	loops   map[int]struct {
+		interval time.Duration
+		stop     chan struct{}
+	}
 }
 
 func NewService(db *sql.DB, cfg config.Config) *Service {
-	return &Service{db: db, cfg: cfg}
+	return &Service{db: db, cfg: cfg, running: map[int]bool{}, loops: map[int]struct {
+		interval time.Duration
+		stop     chan struct{}
+	}{}}
 }
 
 func (s *Service) DB() *sql.DB { return s.db }
@@ -46,16 +57,14 @@ func (s *Service) StartScheduler() {
 			log.Printf("每日任务完成：SSL检测与数据清理")
 		}
 	}()
-	loops := map[int]struct {
-		interval time.Duration
-		stop     chan struct{}
-	}{}
 	for {
 		monitors, err := s.ListMonitors()
 		if err != nil {
+			log.Printf("获取监控列表失败: %v", err)
 			time.Sleep(5 * time.Second)
 			continue
 		}
+		log.Printf("调度器扫描到 %d 个站点", len(monitors))
 		active := map[int]struct{}{}
 		for _, m := range monitors {
 			interval := time.Duration(m.IntervalSeconds) * time.Second
@@ -63,31 +72,93 @@ func (s *Service) StartScheduler() {
 				interval = s.cfg.DefaultCheckInterval
 			}
 			active[m.ID] = struct{}{}
-			if lp, ok := loops[m.ID]; !ok {
+			s.loopsMu.Lock()
+			lp, ok := s.loops[m.ID]
+			if !ok {
 				stop := make(chan struct{})
-				loops[m.ID] = struct {
+				s.loops[m.ID] = struct {
 					interval time.Duration
 					stop     chan struct{}
 				}{interval: interval, stop: stop}
+				s.loopsMu.Unlock()
+				log.Printf("启动监控循环 id=%d 间隔=%s", m.ID, interval.String())
+				s.checkOnce(m.ID)
 				go s.runLoopWithStop(m.ID, interval, stop)
 			} else if lp.interval != interval {
 				close(lp.stop)
 				stop := make(chan struct{})
-				loops[m.ID] = struct {
+				s.loops[m.ID] = struct {
 					interval time.Duration
 					stop     chan struct{}
 				}{interval: interval, stop: stop}
+				s.loopsMu.Unlock()
+				log.Printf("调整监控循环 id=%d 新间隔=%s", m.ID, interval.String())
+				s.checkOnce(m.ID)
 				go s.runLoopWithStop(m.ID, interval, stop)
+			} else {
+				s.loopsMu.Unlock()
 			}
 		}
-		for id, lp := range loops {
+		s.loopsMu.Lock()
+		for id, lp := range s.loops {
 			if _, ok := active[id]; !ok {
 				close(lp.stop)
-				delete(loops, id)
+				delete(s.loops, id)
 			}
 		}
+		s.loopsMu.Unlock()
 		time.Sleep(60 * time.Second)
 	}
+}
+
+func (s *Service) getIntervalByMonitorID(id int) time.Duration {
+	var sec sql.NullInt64
+	_ = s.db.QueryRow(`SELECT interval_seconds FROM monitors WHERE id=$1`, id).Scan(&sec)
+	interval := s.cfg.DefaultCheckInterval
+	if sec.Valid && int(sec.Int64) > 0 {
+		interval = time.Duration(int(sec.Int64)) * time.Second
+	}
+	return interval
+}
+
+func (s *Service) StartLoop(id int) {
+	interval := s.getIntervalByMonitorID(id)
+	s.loopsMu.Lock()
+	if _, ok := s.loops[id]; ok {
+		s.loopsMu.Unlock()
+		return
+	}
+	stop := make(chan struct{})
+	s.loops[id] = struct {
+		interval time.Duration
+		stop     chan struct{}
+	}{interval: interval, stop: stop}
+	s.loopsMu.Unlock()
+	go s.runLoopWithStop(id, interval, stop)
+}
+
+func (s *Service) RestartLoop(id int) {
+	interval := s.getIntervalByMonitorID(id)
+	s.loopsMu.Lock()
+	if lp, ok := s.loops[id]; ok {
+		close(lp.stop)
+	}
+	stop := make(chan struct{})
+	s.loops[id] = struct {
+		interval time.Duration
+		stop     chan struct{}
+	}{interval: interval, stop: stop}
+	s.loopsMu.Unlock()
+	go s.runLoopWithStop(id, interval, stop)
+}
+
+func (s *Service) StopLoop(id int) {
+	s.loopsMu.Lock()
+	if lp, ok := s.loops[id]; ok {
+		close(lp.stop)
+		delete(s.loops, id)
+	}
+	s.loopsMu.Unlock()
 }
 
 func (s *Service) RunSSLCheckAll() error {
@@ -128,25 +199,63 @@ func (s *Service) CleanupOldResults() {
 }
 
 func (s *Service) runLoopWithStop(monitorID int, interval time.Duration, stop chan struct{}) {
-	t := time.NewTicker(interval)
-	defer t.Stop()
+	// align first tick to interval grid
+	now := time.Now()
+	rem := now.UnixNano() % interval.Nanoseconds()
+	delay := time.Duration(interval.Nanoseconds() - rem)
+	if delay == interval {
+		delay = 0
+	}
+	timer := time.NewTimer(delay)
+	defer timer.Stop()
 	for {
 		select {
-		case <-t.C:
-			_ = s.CheckMonitor(monitorID)
+		case <-timer.C:
+			log.Printf("首次对齐触发 id=%d 延迟=%s", monitorID, delay.String())
+			s.checkOnce(monitorID)
+			t := time.NewTicker(interval)
+			defer t.Stop()
+			for {
+				select {
+				case <-t.C:
+					log.Printf("触发定时检查 id=%d", monitorID)
+					s.checkOnce(monitorID)
+				case <-stop:
+					return
+				}
+			}
 		case <-stop:
 			return
 		}
 	}
 }
 
+func (s *Service) checkOnce(id int) {
+	s.mu.Lock()
+	if s.running[id] {
+		s.mu.Unlock()
+		log.Printf("跳过并发检查 id=%d", id)
+		return
+	}
+	s.running[id] = true
+	s.mu.Unlock()
+	defer func() {
+		s.mu.Lock()
+		delete(s.running, id)
+		s.mu.Unlock()
+	}()
+	_ = s.CheckMonitor(id)
+}
+
 func (s *Service) CheckMonitor(id int) error {
+	log.Printf("开始检查 id=%d", id)
 	var m model.Monitor
-	err := s.db.QueryRow(`SELECT id,name,url,method,headers,body,expected_status_min,expected_status_max,keyword,interval_seconds,flap_threshold,notify_cooldown_minutes,last_online,last_checked_at
+	err := s.db.QueryRow(`SELECT id,name,url,method,headers,body,expected_status_min,expected_status_max,keyword,interval_seconds,COALESCE(flap_threshold,0),COALESCE(notify_cooldown_minutes,0),last_online,last_checked_at
 		FROM monitors WHERE id=$1`, id).Scan(
 		&m.ID, &m.Name, &m.URL, &m.Method, &m.HeadersJSON, &m.Body, &m.ExpectedStatusMin, &m.ExpectedStatusMax, &m.Keyword, &m.IntervalSeconds, &m.FlapThreshold, &m.NotifyCooldownMin, &m.LastOnline, &m.LastCheckedAt,
 	)
 	if err != nil {
+		log.Printf("检查加载监控信息失败 id=%d err=%v", id, err)
 		return err
 	}
 
@@ -162,9 +271,11 @@ func (s *Service) CheckMonitor(id int) error {
 			req.Header.Set(k, v)
 		}
 	}
-	client := &http.Client{
-		Timeout: time.Duration(m.IntervalSeconds) * time.Second,
+	timeout := time.Duration(m.IntervalSeconds) * time.Second
+	if timeout <= 0 {
+		timeout = s.cfg.DefaultCheckInterval
 	}
+	client := &http.Client{Timeout: timeout}
 	resp, err := client.Do(req)
 	var online bool
 	var statusCode int
