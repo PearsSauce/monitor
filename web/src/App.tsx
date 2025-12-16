@@ -187,13 +187,13 @@ export default function App() {
   ]
 
   return (
-    <Layout className="min-h-screen bg-gray-50 dark:bg-gray-900">
-      <Layout.Header className="bg-white dark:bg-gray-800 shadow-sm px-6 h-16 flex items-center justify-between sticky top-0 z-50">
-        <div className="flex items-center">
-          <div className="w-8 h-8 bg-blue-600 rounded mr-3 flex items-center justify-center">
-            <IconDesktop style={{ color: '#fff', fontSize: 20 }} />
+    <Layout className="min-h-screen bg-slate-50 dark:bg-slate-950 transition-colors duration-300">
+      <Layout.Header className="bg-white dark:bg-slate-900 shadow-sm border-b border-slate-200 dark:border-slate-800 px-6 h-16 flex items-center justify-between sticky top-0 z-50 transition-colors duration-300">
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center shadow-lg shadow-blue-500/30">
+            <IconDesktop className="text-white text-lg" />
           </div>
-          <Typography.Title heading={5} style={{ margin: 0 }}>网站监控系统</Typography.Title>
+          <Typography.Title heading={5} className="!m-0 !text-slate-800 dark:!text-slate-100">服务监控面板</Typography.Title>
         </div>
         <Space size="medium">
           <Button icon={<IconSync />} onClick={fetchData} loading={loading} type="secondary">刷新</Button>
@@ -218,53 +218,53 @@ export default function App() {
             
             <Grid.Row gutter={16}>
               <Grid.Col span={6}>
-                <Card className="hover:shadow-md transition-shadow duration-300">
+                <Card className="hover:shadow-md transition-shadow duration-300 bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800">
                   <div className="flex justify-between items-start">
                     <div>
-                      <Typography.Text className="text-gray-500">总站点数</Typography.Text>
-                      <div className="text-3xl mt-2 font-bold text-gray-800 dark:text-gray-100">{totalCount}</div>
+                      <Typography.Text className="text-slate-500 dark:text-slate-400">总站点数</Typography.Text>
+                      <div className="text-3xl mt-2 font-bold text-slate-800 dark:text-slate-100">{totalCount}</div>
                     </div>
-                    <div className="p-3 bg-blue-50 dark:bg-blue-900 rounded-full">
-                      <IconDesktop className="text-blue-600 dark:text-blue-100 text-xl" />
+                    <div className="p-3 bg-blue-50 dark:bg-opacity-20 dark:bg-blue-500 rounded-full">
+                      <IconDesktop className="text-blue-600 dark:text-blue-300 text-xl" />
                     </div>
                   </div>
                 </Card>
               </Grid.Col>
               <Grid.Col span={6}>
-                <Card className="hover:shadow-md transition-shadow duration-300">
+                <Card className="hover:shadow-md transition-shadow duration-300 bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800">
                   <div className="flex justify-between items-start">
                     <div>
-                      <Typography.Text className="text-gray-500">在线站点</Typography.Text>
-                      <div className="text-3xl mt-2 font-bold text-green-600">{onlineCount}</div>
+                      <Typography.Text className="text-slate-500 dark:text-slate-400">在线站点</Typography.Text>
+                      <div className="text-3xl mt-2 font-bold text-green-600 dark:text-green-400">{onlineCount}</div>
                     </div>
-                    <div className="p-3 bg-green-50 dark:bg-green-900 rounded-full">
-                      <IconCheckCircle className="text-green-600 dark:text-green-100 text-xl" />
+                    <div className="p-3 bg-green-50 dark:bg-opacity-20 dark:bg-green-500 rounded-full">
+                      <IconCheckCircle className="text-green-600 dark:text-green-300 text-xl" />
                     </div>
                   </div>
                 </Card>
               </Grid.Col>
               <Grid.Col span={6}>
-                <Card className="hover:shadow-md transition-shadow duration-300">
+                <Card className="hover:shadow-md transition-shadow duration-300 bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800">
                   <div className="flex justify-between items-start">
                     <div>
-                      <Typography.Text className="text-gray-500">离线站点</Typography.Text>
-                      <div className="text-3xl mt-2 font-bold text-red-600">{offlineCount}</div>
+                      <Typography.Text className="text-slate-500 dark:text-slate-400">离线站点</Typography.Text>
+                      <div className="text-3xl mt-2 font-bold text-red-600 dark:text-red-400">{offlineCount}</div>
                     </div>
-                    <div className="p-3 bg-red-50 dark:bg-red-900 rounded-full">
-                      <IconCloseCircle className="text-red-600 dark:text-red-100 text-xl" />
+                    <div className="p-3 bg-red-50 dark:bg-opacity-20 dark:bg-red-500 rounded-full">
+                      <IconCloseCircle className="text-red-600 dark:text-red-300 text-xl" />
                     </div>
                   </div>
                 </Card>
               </Grid.Col>
               <Grid.Col span={6}>
-                <Card className="hover:shadow-md transition-shadow duration-300">
+                <Card className="hover:shadow-md transition-shadow duration-300 bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800">
                   <div className="flex justify-between items-start">
                     <div>
-                      <Typography.Text className="text-gray-500">平均响应</Typography.Text>
-                      <div className="text-3xl mt-2 font-bold text-blue-600">{avgRespAll}</div>
+                      <Typography.Text className="text-slate-500 dark:text-slate-400">平均响应</Typography.Text>
+                      <div className="text-3xl mt-2 font-bold text-blue-600 dark:text-blue-400">{avgRespAll}</div>
                     </div>
-                    <div className="p-3 bg-indigo-50 dark:bg-indigo-900 rounded-full">
-                      <IconClockCircle className="text-indigo-600 dark:text-indigo-100 text-xl" />
+                    <div className="p-3 bg-indigo-50 dark:bg-opacity-20 dark:bg-indigo-500 rounded-full">
+                      <IconClockCircle className="text-indigo-600 dark:text-indigo-300 text-xl" />
                     </div>
                   </div>
                 </Card>
@@ -273,18 +273,18 @@ export default function App() {
             
             <Grid.Row gutter={16} className="mt-4">
               <Grid.Col span={16}>
-                <Card title="24小时响应趋势" className="h-full hover:shadow-md transition-shadow">
+                <Card title="24小时响应趋势" className="h-full hover:shadow-md transition-shadow bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800">
                   <ResponseTrendChart data={trendData} isDark={dark} />
                 </Card>
               </Grid.Col>
               <Grid.Col span={8}>
-                <Card title="当前响应分布" className="h-full hover:shadow-md transition-shadow">
+                <Card title="当前响应分布" className="h-full hover:shadow-md transition-shadow bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800">
                   <ResponseDistChart data={distData} isDark={dark} />
                 </Card>
               </Grid.Col>
             </Grid.Row>
     
-            <Card className="mt-4 hover:shadow-md transition-shadow" title="监控列表">
+            <Card className="mt-4 hover:shadow-md transition-shadow bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800" title="监控列表">
               <Table rowKey="id" columns={columns as any} data={filtered} pagination={false} border={false} />
             </Card>
           </Layout.Content>

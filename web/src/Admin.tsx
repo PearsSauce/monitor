@@ -68,14 +68,14 @@ export default function Admin() {
   const openGroups = () => { setShowGroups(true) }
   
   return (
-    <Layout className="min-h-screen bg-gray-50 dark:bg-gray-900">
-      <Layout.Header className="bg-white dark:bg-gray-800 shadow-sm px-6 h-16 flex items-center justify-between sticky top-0 z-50">
+    <Layout className="min-h-screen bg-slate-50 dark:bg-slate-950 transition-colors duration-300">
+      <Layout.Header className="bg-white dark:bg-slate-900 shadow-sm border-b border-slate-200 dark:border-slate-800 px-6 h-16 flex items-center justify-between sticky top-0 z-50 transition-colors duration-300">
         <div className="flex items-center">
-          <Typography.Title heading={5} style={{ margin: 0 }}>系统管理</Typography.Title>
+          <Typography.Title heading={5} style={{ margin: 0 }} className="text-slate-800 dark:text-slate-100">系统管理</Typography.Title>
         </div>
         <Space>
           <Switch checked={dark} onChange={setDark} checkedIcon={<IconMoonFill />} uncheckedIcon={<IconSun />} />
-          <Button type="text" icon={<IconHome />} onClick={goDashboard}>返回首页</Button>
+          <Button type="text" icon={<IconHome />} onClick={goDashboard} className="text-slate-600 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400">返回首页</Button>
           <Button type="text" status="danger" icon={<IconPoweroff />} onClick={logout}>退出登录</Button>
         </Space>
       </Layout.Header>
@@ -85,7 +85,7 @@ export default function Admin() {
           <Breadcrumb.Item>系统管理</Breadcrumb.Item>
         </Breadcrumb>
         
-        <Card className="shadow-sm rounded-lg">
+        <Card className="shadow-sm rounded-lg bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800">
           <Tabs defaultActiveTab="monitors">
             <Tabs.TabPane key="monitors" title={<span><IconDesktop /> 监控列表</span>}>
               <div className="mb-4">
