@@ -7,14 +7,16 @@ import (
 )
 
 type Config struct {
-	Addr                 string
-	DatabaseURL          string
-	ResendAPIKey         string
-	AlertBeforeDays      int
-	DefaultCheckInterval time.Duration
-	AdminPassword        string
-	RetentionDays        int
-	FlapThreshold        int
+	Addr                  string
+	DatabaseURL           string
+	ResendAPIKey          string
+	AlertBeforeDays       int
+	DefaultCheckInterval  time.Duration
+	AdminPassword         string
+	RetentionDays         int
+	FlapThreshold         int
+	NotifyCooldownMinutes int
+	StabilizeCount        int
 }
 
 func Load() Config {
@@ -27,16 +29,20 @@ func Load() Config {
 	adminPw := getenvDefault("ADMIN_PASSWORD", "")
 	retention := getenvIntDefault("RETENTION_DAYS", 30)
 	flap := getenvIntDefault("FLAP_THRESHOLD", 2)
+	cooldown := getenvIntDefault("NOTIFY_COOLDOWN_MINUTES", 10)
+	stabilize := getenvIntDefault("STABILIZE_COUNT", 2)
 
 	return Config{
-		Addr:                 addr,
-		DatabaseURL:          dbURL,
-		ResendAPIKey:         resend,
-		AlertBeforeDays:      alertDays,
-		DefaultCheckInterval: time.Duration(intervalSec) * time.Second,
-		AdminPassword:        adminPw,
-		RetentionDays:        retention,
-		FlapThreshold:        flap,
+		Addr:                  addr,
+		DatabaseURL:           dbURL,
+		ResendAPIKey:          resend,
+		AlertBeforeDays:       alertDays,
+		DefaultCheckInterval:  time.Duration(intervalSec) * time.Second,
+		AdminPassword:         adminPw,
+		RetentionDays:         retention,
+		FlapThreshold:         flap,
+		NotifyCooldownMinutes: cooldown,
+		StabilizeCount:        stabilize,
 	}
 }
 

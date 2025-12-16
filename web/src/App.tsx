@@ -1,7 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { Button, Card, Divider, Drawer, Form, Grid, Input, InputNumber, Message, Modal, Select, Space, Switch, Table, Tag, Typography } from '@arco-design/web-react'
-import { IconMoonFill, IconSun, IconSync } from '@arco-design/web-react/icon'
-import { createGroup, createMonitor, deleteGroup, getGroups, getHistory, getHistoryByDay, getMonitors, getSSL, getSetupState, postSetup, updateGroup, updateMonitor, setAdminPassword, getSettings, updateSettings, verifyAdmin, getNotifications, getLatestResult } from './api'
+import { IconMoonFill, IconSun, IconSync, IconArrowLeft } from '@arco-design/web-react/icon'
+import { createGroup, createMonitor, deleteGroup, getGroups, getHistory, getHistoryByDay, getMonitors, getSSL, getSetupState, postSetup, updateGroup, updateMonitor, setAdminPassword, getSettings, updateSettings, verifyAdmin, getNotifications, getLatestResult, getGlobalTrend } from './api'
+import { ResponseTrendChart, ResponseDistChart } from './components/ChartComponents'
+import { NotificationTicker } from './components/NotificationTicker'
 
 type Monitor = {
   id: number
@@ -53,10 +55,14 @@ export default function App() {
   const [showLogin, setShowLogin] = useState(false)
   const [needSetup, setNeedSetup] = useState(false)
   const [notices, setNotices] = useState<NotificationItem[]>([])
+  const [trendData, setTrendData] = useState<{time:string, avg_resp:number}[]>([])
+  const [view, setView] = useState<'dashboard' | 'notifications'>('dashboard')
 
   const fetchData = async () => {
     try {
       setLoading(true)
+      const trend = await getGlobalTrend().catch(()=>[])
+      setTrendData(trend)
       const data = await getMonitors()
       setList(Array.isArray(data) ? data : [])
       const gs = await getGroups()
@@ -119,6 +125,23 @@ export default function App() {
     if (!used.length) return '-'
     const sum = used.reduce((s, x) => s + x.v, 0)
     return `${Math.round(sum / used.length)} ms`
+  }, [latest])
+
+  const distData = useMemo(() => {
+    const counts = { fast: 0, medium: 0, slow: 0, error: 0 }
+    Object.values(latest).forEach(ms => {
+      if (ms < 0) return
+      if (ms < 100) counts.fast++
+      else if (ms < 500) counts.medium++
+      else if (ms < 1000) counts.slow++
+      else counts.error++
+    })
+    return [
+      { range: '<100ms', count: counts.fast },
+      { range: '100-500ms', count: counts.medium },
+      { range: '500-1000ms', count: counts.slow },
+      { range: '>1000ms', count: counts.error },
+    ].filter(x => x.count > 0)
   }, [latest])
 
   const columns = [
@@ -188,54 +211,85 @@ export default function App() {
           </Space>
         </Space>
         <Divider />
-        <Card>
-          <Grid.Row gutter={16}>
-            <Grid.Col span={6}>
-              <Card>
-                <Typography.Text style={{ color: 'var(--color-text-1)' }}>总站点数</Typography.Text>
-                <div className="text-2xl mt-2 text-black dark:text-white">{totalCount}</div>
-              </Card>
-            </Grid.Col>
-            <Grid.Col span={6}>
-              <Card>
-                <Typography.Text style={{ color: 'var(--color-text-1)' }}>在线站点</Typography.Text>
-                <div className="text-2xl mt-2 text-green-600">{onlineCount}</div>
-              </Card>
-            </Grid.Col>
-            <Grid.Col span={6}>
-              <Card>
-                <Typography.Text style={{ color: 'var(--color-text-1)' }}>离线站点</Typography.Text>
-                <div className="text-2xl mt-2 text-red-600">{offlineCount}</div>
-              </Card>
-            </Grid.Col>
-            <Grid.Col span={6}>
-              <Card>
-                <Typography.Text style={{ color: 'var(--color-text-1)' }}>平均响应</Typography.Text>
-                <div className="text-2xl mt-2 text-blue-600">{avgRespAll}</div>
-              </Card>
-            </Grid.Col>
-          </Grid.Row>
-        </Card>
-        <Divider />
-        <Card>
-          <Typography.Title heading={6}>异常通知</Typography.Title>
-          {notices.length === 0 ? (
-            <div className="text-gray-500 text-sm">暂无异常通知</div>
-          ) : (
-            <Table rowKey="id" data={notices} pagination={false} columns={[
-              { title: '时间', dataIndex: 'created_at',
-                render: (v:any)=> (v ? new Date(v).toLocaleString() : '-') },
-              { title: '站点', dataIndex: 'monitor_name' },
-              { title: '类型', dataIndex: 'type',
-                render: (v:any)=> <Tag color={v==='status_change'?'red':v==='ssl_expiry'?'orange':'blue'}>{v}</Tag> },
-              { title: '消息', dataIndex: 'message' }
-            ] as any} />
-          )}
-        </Card>
-        <Divider />
-        <Card>
-          <Table rowKey="id" columns={columns as any} data={filtered} pagination={false} />
-        </Card>
+        
+        {view === 'dashboard' ? (
+          <>
+            <Card>
+              <Grid.Row gutter={16}>
+                <Grid.Col span={6}>
+                  <Card>
+                    <Typography.Text style={{ color: 'var(--color-text-1)' }}>总站点数</Typography.Text>
+                    <div className="text-2xl mt-2 text-black dark:text-white">{totalCount}</div>
+                  </Card>
+                </Grid.Col>
+                <Grid.Col span={6}>
+                  <Card>
+                    <Typography.Text style={{ color: 'var(--color-text-1)' }}>在线站点</Typography.Text>
+                    <div className="text-2xl mt-2 text-green-600">{onlineCount}</div>
+                  </Card>
+                </Grid.Col>
+                <Grid.Col span={6}>
+                  <Card>
+                    <Typography.Text style={{ color: 'var(--color-text-1)' }}>离线站点</Typography.Text>
+                    <div className="text-2xl mt-2 text-red-600">{offlineCount}</div>
+                  </Card>
+                </Grid.Col>
+                <Grid.Col span={6}>
+                  <Card>
+                    <Typography.Text style={{ color: 'var(--color-text-1)' }}>平均响应</Typography.Text>
+                    <div className="text-2xl mt-2 text-blue-600">{avgRespAll}</div>
+                  </Card>
+                </Grid.Col>
+              </Grid.Row>
+            </Card>
+            
+            <Grid.Row gutter={16} className="mt-4">
+              <Grid.Col span={16}>
+                <Card>
+                  <ResponseTrendChart data={trendData} isDark={dark} />
+                </Card>
+              </Grid.Col>
+              <Grid.Col span={8}>
+                <Card>
+                  <ResponseDistChart data={distData} isDark={dark} />
+                </Card>
+              </Grid.Col>
+            </Grid.Row>
+    
+            <div className="mt-4">
+               <NotificationTicker notices={notices} onClick={() => setView('notifications')} isDark={dark} />
+            </div>
+
+            <Divider />
+            <Card>
+              <Table rowKey="id" columns={columns as any} data={filtered} pagination={false} />
+            </Card>
+          </>
+        ) : (
+          <Card 
+            title={
+              <Space>
+                <Button icon={<IconArrowLeft />} onClick={() => setView('dashboard')} shape="circle" />
+                <Typography.Text>异常通知历史</Typography.Text>
+              </Space>
+            }
+          >
+            <Table 
+              rowKey="id" 
+              data={notices} 
+              pagination={{ pageSize: 20 }} 
+              columns={[
+                { title: '时间', dataIndex: 'created_at', width: 200,
+                  render: (v:any)=> (v ? new Date(v).toLocaleString() : '-') },
+                { title: '站点', dataIndex: 'monitor_name', width: 200 },
+                { title: '类型', dataIndex: 'type', width: 120,
+                  render: (v:any)=> <Tag color={v==='status_change'?'red':v==='ssl_expiry'?'orange':'blue'}>{v==='status_change'?'状态变更':v==='ssl_expiry'?'SSL过期':v}</Tag> },
+                { title: '消息', dataIndex: 'message' }
+              ] as any} 
+            />
+          </Card>
+        )}
+
         {showDetail && detailId !== null && <DetailDrawer id={detailId} onClose={() => setShowDetail(false)} />}
         {needSetup && <SetupWizard onDone={async () => { setNeedSetup(false); await fetchData() }} />}
         {showLogin && <LoginModal onClose={()=>setShowLogin(false)} />}

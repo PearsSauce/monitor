@@ -142,9 +142,9 @@ func (s *Service) runLoopWithStop(monitorID int, interval time.Duration, stop ch
 
 func (s *Service) CheckMonitor(id int) error {
 	var m model.Monitor
-	err := s.db.QueryRow(`SELECT id,name,url,method,headers,body,expected_status_min,expected_status_max,keyword,interval_seconds,last_online,last_checked_at
+	err := s.db.QueryRow(`SELECT id,name,url,method,headers,body,expected_status_min,expected_status_max,keyword,interval_seconds,flap_threshold,notify_cooldown_minutes,last_online,last_checked_at
 		FROM monitors WHERE id=$1`, id).Scan(
-		&m.ID, &m.Name, &m.URL, &m.Method, &m.HeadersJSON, &m.Body, &m.ExpectedStatusMin, &m.ExpectedStatusMax, &m.Keyword, &m.IntervalSeconds, &m.LastOnline, &m.LastCheckedAt,
+		&m.ID, &m.Name, &m.URL, &m.Method, &m.HeadersJSON, &m.Body, &m.ExpectedStatusMin, &m.ExpectedStatusMax, &m.Keyword, &m.IntervalSeconds, &m.FlapThreshold, &m.NotifyCooldownMin, &m.LastOnline, &m.LastCheckedAt,
 	)
 	if err != nil {
 		return err
@@ -208,22 +208,57 @@ func (s *Service) CheckMonitor(id int) error {
 	_, _ = s.db.Exec(`INSERT INTO monitor_state(monitor_id,last_reported_online,online_streak,offline_streak)
 		VALUES($1,$2,$3,$4)
 		ON CONFLICT (monitor_id) DO UPDATE SET online_streak=EXCLUDED.online_streak, offline_streak=EXCLUDED.offline_streak`, m.ID, lastReported.Bool, onStreak, offStreak)
+	// thresholds and cooldowns
+	thresh := m.FlapThreshold
+	if thresh <= 0 {
+		thresh = s.cfg.FlapThreshold
+	}
+	cooldownMin := m.NotifyCooldownMin
+	if cooldownMin <= 0 {
+		cooldownMin = s.cfg.NotifyCooldownMinutes
+	}
+	stabilize := s.cfg.StabilizeCount
+	if stabilize < 0 {
+		stabilize = 0
+	}
+
 	shouldNotify := false
 	if !lastReported.Valid {
-		_, _ = s.db.Exec(`UPDATE monitor_state SET last_reported_online=$1 WHERE monitor_id=$2`, online, m.ID)
+		if stabilize <= 1 {
+			_, _ = s.db.Exec(`UPDATE monitor_state SET last_reported_online=$1 WHERE monitor_id=$2`, online, m.ID)
+		} else {
+			if online && onStreak >= stabilize {
+				_, _ = s.db.Exec(`UPDATE monitor_state SET last_reported_online=true WHERE monitor_id=$1`, m.ID)
+			}
+			if !online && offStreak >= stabilize {
+				_, _ = s.db.Exec(`UPDATE monitor_state SET last_reported_online=false WHERE monitor_id=$1`, m.ID)
+			}
+		}
 	} else if lastReported.Bool != online {
-		if online && onStreak >= s.cfg.FlapThreshold {
+		if online && onStreak >= thresh {
 			shouldNotify = true
 			_, _ = s.db.Exec(`UPDATE monitor_state SET last_reported_online=true WHERE monitor_id=$1`, m.ID)
 		}
-		if !online && offStreak >= s.cfg.FlapThreshold {
+		if !online && offStreak >= thresh {
 			shouldNotify = true
 			_, _ = s.db.Exec(`UPDATE monitor_state SET last_reported_online=false WHERE monitor_id=$1`, m.ID)
 		}
 	}
 	if shouldNotify {
-		notify.SendResend(s.cfg.ResendAPIKey, "monitor alert", s.alertEmailTo(), s.buildStatusChangeEmail(m, online, statusCode, errStr))
-		_, _ = s.db.Exec(`INSERT INTO notifications(monitor_id,type,message) VALUES($1,$2,$3)`, m.ID, "status_change", s.buildStatusChangeEmail(m, online, statusCode, errStr))
+		// cooldown and initial recovery gating
+		if online {
+			// only send recovery if there was an offline notice before
+			if !s.hadPrevOfflineNotice(m.ID) {
+				shouldNotify = false
+			}
+		}
+		if shouldNotify && !s.allowedToNotify(m.ID, "status_change", cooldownMin) {
+			shouldNotify = false
+		}
+		if shouldNotify {
+			notify.SendResend(s.cfg.ResendAPIKey, "monitor alert", s.alertEmailTo(), s.buildStatusChangeEmail(m, online, statusCode, errStr))
+			_, _ = s.db.Exec(`INSERT INTO notifications(monitor_id,type,message) VALUES($1,$2,$3)`, m.ID, "status_change", s.buildStatusChangeEmail(m, online, statusCode, errStr))
+		}
 		if s.evt != nil {
 			msg := s.buildStatusChangeEmail(m, online, statusCode, errStr)
 			select {
@@ -289,8 +324,11 @@ func (s *Service) checkSSL(m *model.Monitor) {
 
 	if daysLeft <= s.cfg.AlertBeforeDays {
 		msg := s.buildSSLExpiryEmail(*m, daysLeft, expires)
-		notify.SendResend(s.cfg.ResendAPIKey, "SSL 证书到期提醒", s.alertEmailTo(), msg)
-		_, _ = s.db.Exec(`INSERT INTO notifications(monitor_id,type,message) VALUES($1,$2,$3)`, m.ID, "ssl_expiry", msg)
+		// apply cooldown for ssl notifications too
+		if s.allowedToNotify(m.ID, "ssl_expiry", s.cfg.NotifyCooldownMinutes) {
+			notify.SendResend(s.cfg.ResendAPIKey, "SSL 证书到期提醒", s.alertEmailTo(), msg)
+			_, _ = s.db.Exec(`INSERT INTO notifications(monitor_id,type,message) VALUES($1,$2,$3)`, m.ID, "ssl_expiry", msg)
+		}
 		if s.evt != nil {
 			select {
 			case s.evt <- Update{
@@ -347,6 +385,27 @@ func hostFromURL(u string) string {
 		host = strings.Split(host, ":")[0]
 	}
 	return host
+}
+
+func (s *Service) allowedToNotify(monitorID int, typ string, cooldownMinutes int) bool {
+	if cooldownMinutes <= 0 {
+		return true
+	}
+	var t sql.NullTime
+	_ = s.db.QueryRow(`SELECT created_at FROM notifications WHERE monitor_id=$1 AND type=$2 ORDER BY created_at DESC LIMIT 1`,
+		monitorID, typ).Scan(&t)
+	if !t.Valid {
+		return true
+	}
+	return time.Since(t.Time) >= time.Duration(cooldownMinutes)*time.Minute
+}
+
+func (s *Service) hadPrevOfflineNotice(monitorID int) bool {
+	var exists bool
+	_ = s.db.QueryRow(`SELECT EXISTS(
+		SELECT 1 FROM notifications WHERE monitor_id=$1 AND type='status_change' AND message LIKE '%发生异常%' LIMIT 1
+	)`, monitorID).Scan(&exists)
+	return exists
 }
 
 func (s *Service) ListMonitors() ([]model.Monitor, error) {

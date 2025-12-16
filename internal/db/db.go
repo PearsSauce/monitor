@@ -30,6 +30,8 @@ func Migrate(db *sql.DB) error {
 			keyword TEXT,
 			group_id BIGINT REFERENCES monitor_groups(id) ON DELETE SET NULL,
 			interval_seconds INT NOT NULL DEFAULT 60,
+			flap_threshold INT,
+			notify_cooldown_minutes INT,
 			last_online BOOLEAN,
 			last_checked_at TIMESTAMPTZ
 		);`,
@@ -100,6 +102,9 @@ func Migrate(db *sql.DB) error {
 				ALTER TABLE notifications ALTER COLUMN monitor_id TYPE BIGINT;
 			END IF;
 		END $$;`,
+		// Add new optional columns if not exist
+		`ALTER TABLE monitors ADD COLUMN IF NOT EXISTS flap_threshold INT;`,
+		`ALTER TABLE monitors ADD COLUMN IF NOT EXISTS notify_cooldown_minutes INT;`,
 	}
 	for _, s := range stmts {
 		if _, err := db.Exec(s); err != nil {

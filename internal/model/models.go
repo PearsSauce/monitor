@@ -21,6 +21,8 @@ type Monitor struct {
 	Keyword           string     `json:"keyword"`
 	GroupID           *int       `json:"group_id"`
 	IntervalSeconds   int        `json:"interval_seconds"`
+	FlapThreshold     int        `json:"flap_threshold"`
+	NotifyCooldownMin int        `json:"notify_cooldown_minutes"`
 	LastOnline        *bool      `json:"last_online"`
 	LastCheckedAt     *time.Time `json:"last_checked_at"`
 }
@@ -41,4 +43,3 @@ type SSLInfo struct {
 	Issuer    string     `json:"issuer"`
 	DaysLeft  *int       `json:"days_left"`
 }
-
