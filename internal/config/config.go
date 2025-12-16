@@ -17,6 +17,7 @@ type Config struct {
 	FlapThreshold         int
 	NotifyCooldownMinutes int
 	StabilizeCount        int
+	JWTSecret             string
 }
 
 func Load() Config {
@@ -31,6 +32,7 @@ func Load() Config {
 	flap := getenvIntDefault("FLAP_THRESHOLD", 2)
 	cooldown := getenvIntDefault("NOTIFY_COOLDOWN_MINUTES", 10)
 	stabilize := getenvIntDefault("STABILIZE_COUNT", 2)
+	jwtSecret := getenvDefault("JWT_SECRET", "default-jwt-secret-key")
 
 	return Config{
 		Addr:                  addr,
@@ -43,6 +45,7 @@ func Load() Config {
 		FlapThreshold:         flap,
 		NotifyCooldownMinutes: cooldown,
 		StabilizeCount:        stabilize,
+		JWTSecret:             jwtSecret,
 	}
 }
 

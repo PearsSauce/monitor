@@ -18,6 +18,8 @@ import (
 	"monitor/internal/db"
 	"monitor/internal/model"
 	"monitor/internal/monitor"
+
+	"github.com/golang-jwt/jwt/v5"
 )
 
 type Server struct {
@@ -101,6 +103,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("/api/settings", s.handleSettings)
 	s.mux.HandleFunc("/api/stats/trend", s.handleStatsTrend)
 	s.mux.HandleFunc("/api/admin/verify", s.handleAdminVerify)
+	s.mux.HandleFunc("/api/login", s.handleLogin)
 }
 
 func writeJSON(w http.ResponseWriter, v interface{}) {
@@ -125,8 +128,48 @@ func (lw *loggingWriter) Flush() {
 }
 
 func (s *Server) adminOK(r *http.Request) bool {
-	pw := r.Header.Get("X-Admin-Password")
-	return s.cfg.AdminPassword != "" && pw == s.cfg.AdminPassword
+	auth := r.Header.Get("Authorization")
+	if strings.HasPrefix(auth, "Bearer ") {
+		tokenString := strings.TrimPrefix(auth, "Bearer ")
+		token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
+			if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+				return nil, http.ErrAbortHandler
+			}
+			return []byte(s.cfg.JWTSecret), nil
+		})
+		if err == nil && token.Valid {
+			return true
+		}
+	}
+	return false
+}
+
+func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", 405)
+		return
+	}
+	var req struct {
+		Password string `json:"password"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid json", 400)
+		return
+	}
+	if s.cfg.AdminPassword == "" || req.Password != s.cfg.AdminPassword {
+		http.Error(w, "unauthorized", 401)
+		return
+	}
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+		"admin": true,
+		"exp":   time.Now().Add(24 * time.Hour).Unix(),
+	})
+	ts, err := token.SignedString([]byte(s.cfg.JWTSecret))
+	if err != nil {
+		http.Error(w, "internal error", 500)
+		return
+	}
+	writeJSON(w, map[string]string{"token": ts})
 }
 
 func (s *Server) handleMonitors(w http.ResponseWriter, r *http.Request) {

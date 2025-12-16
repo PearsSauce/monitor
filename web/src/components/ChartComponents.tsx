@@ -14,6 +14,7 @@ interface TrendChartProps {
 export const ResponseTrendChart: React.FC<TrendChartProps> = ({ data, isDark }) => {
   const spec = useMemo(() => ({
     type: 'area',
+    background: 'transparent',
     data: {
       values: data,
     },
@@ -43,8 +44,30 @@ export const ResponseTrendChart: React.FC<TrendChartProps> = ({ data, isDark }) 
       xField: { visible: true, label: { visible: true, style: { fill: '#fff', background: { fill: '#165DFF' } } } },
       yField: { visible: false }
     },
+    point: {
+        visible: true,
+        style: { fill: isDark ? '#60a5fa' : '#165DFF', stroke: isDark ? '#1f2937' : '#fff', lineWidth: 2 }
+    },
     tooltip: {
         visible: true,
+        style: {
+          panel: {
+            backgroundColor: isDark ? 'rgba(23,23,23,0.9)' : 'rgba(255,255,255,0.9)',
+            border: {
+              stroke: isDark ? '#333' : '#eee'
+            },
+            shadow: {
+              color: isDark ? 'rgba(0,0,0,0.5)' : 'rgba(0,0,0,0.1)'
+            }
+          },
+          title: {
+            style: { fill: isDark ? '#fff' : '#000' }
+          },
+          content: {
+            key: { style: { fill: isDark ? 'rgba(255,255,255,0.7)' : '#666' } },
+            value: { style: { fill: isDark ? '#fff' : '#000' } }
+          }
+        },
         mark: {
             title: { value: '平均响应' },
             content: [{ key: (d: any) => new Date(d.time).toLocaleString(), value: (d: any) => `${d.avg_resp}ms` }]
@@ -57,15 +80,15 @@ export const ResponseTrendChart: React.FC<TrendChartProps> = ({ data, isDark }) 
       style: { fill: isDark ? '#fff' : '#000', fontSize: 16, fontWeight: 'normal' },
       padding: { bottom: 10 }
     },
-    color: ['#165DFF'],
+    color: [isDark ? '#60a5fa' : '#165DFF'],
     area: {
         style: {
             fill: {
                 gradient: 'linear',
                 x0: 0.5, y0: 0, x1: 0.5, y1: 1,
                 stops: [
-                    { offset: 0, color: 'rgba(22,93,255,0.5)' },
-                    { offset: 1, color: 'rgba(22,93,255,0.0)' }
+                    { offset: 0, color: isDark ? 'rgba(96,165,250,0.5)' : 'rgba(22,93,255,0.5)' },
+                    { offset: 1, color: isDark ? 'rgba(96,165,250,0.0)' : 'rgba(22,93,255,0.0)' }
                 ]
             }
         }
@@ -83,6 +106,7 @@ interface DistProps {
 export const ResponseDistChart: React.FC<DistProps> = ({ data, isDark }) => {
   const spec = useMemo(() => ({
     type: 'pie',
+    background: 'transparent',
     data: {
       values: data,
     },
@@ -109,7 +133,25 @@ export const ResponseDistChart: React.FC<DistProps> = ({ data, isDark }) => {
       }
     },
     tooltip: {
-        visible: true
+        visible: true,
+        style: {
+          panel: {
+            backgroundColor: isDark ? 'rgba(23,23,23,0.9)' : 'rgba(255,255,255,0.9)',
+            border: {
+              stroke: isDark ? '#333' : '#eee'
+            },
+            shadow: {
+              color: isDark ? 'rgba(0,0,0,0.5)' : 'rgba(0,0,0,0.1)'
+            }
+          },
+          title: {
+            style: { fill: isDark ? '#fff' : '#000' }
+          },
+          content: {
+            key: { style: { fill: isDark ? 'rgba(255,255,255,0.7)' : '#666' } },
+            value: { style: { fill: isDark ? '#fff' : '#000' } }
+          }
+        }
     },
     title: {
       visible: true,
@@ -118,7 +160,9 @@ export const ResponseDistChart: React.FC<DistProps> = ({ data, isDark }) => {
       style: { fill: isDark ? '#fff' : '#000', fontSize: 16, fontWeight: 'normal' },
       padding: { bottom: 10 }
     },
-    color: ['#00B42A', '#165DFF', '#FF7D00', '#F53F3F']
+    color: isDark ? 
+      ['#4ade80', '#60a5fa', '#fb923c', '#f87171'] : 
+      ['#00B42A', '#165DFF', '#FF7D00', '#F53F3F']
   }), [data, isDark]);
 
   return <VChart spec={spec as any} options={{ mode: 'desktop-browser' }} style={{ height: 320 }} />;

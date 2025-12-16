@@ -1,16 +1,22 @@
 import React, { useEffect, useState } from 'react'
-import { Button, Form, Grid, InputNumber, Input, Message, Space, Typography, Card, Divider, Table, Tag, Modal, Select } from '@arco-design/web-react'
-import { getSettings, updateSettings, setAdminPassword, getMonitors, getGroups, createMonitor, updateMonitor, deleteMonitor, createGroup, updateGroup, deleteGroup } from './api'
+import { Button, Form, Grid, InputNumber, Input, Message, Space, Typography, Card, Divider, Table, Tag, Modal, Select, Layout, Breadcrumb, Tabs, Switch } from '@arco-design/web-react'
+import { IconHome, IconSettings, IconPoweroff, IconPlus, IconDesktop, IconDelete, IconEdit, IconMoonFill, IconSun } from '@arco-design/web-react/icon'
+import { getSettings, updateSettings, getToken, setToken, getMonitors, getGroups, createMonitor, updateMonitor, deleteMonitor, createGroup, updateGroup, deleteGroup } from './api'
+import Login from './Login'
+import useTheme from './useTheme'
 
 export default function Admin() {
+  const { dark, setDark } = useTheme()
   const [form] = Form.useForm()
-  const [adminPw, setAdminPw] = useState('')
   const [list, setList] = useState<Monitor[]>([])
   const [groups, setGroups] = useState<Group[]>([])
   const [showForm, setShowForm] = useState(false)
   const [editing, setEditing] = useState<Monitor | null>(null)
   const [showGroups, setShowGroups] = useState(false)
+  const [token, setTokenState] = useState(getToken())
+
   useEffect(() => {
+    if (!token) return
     getSettings().then(s => {
       form.setFieldsValue({
         retention_days: s.retention_days,
@@ -19,14 +25,12 @@ export default function Admin() {
       })
     }).catch(()=>{})
     fetchData()
-    try {
-      const saved = typeof localStorage !== 'undefined' ? localStorage.getItem('ADMIN_PASSWORD') : ''
-      if (saved) {
-        setAdminPw(saved)
-        setAdminPassword(saved)
-      }
-    } catch {}
-  }, [])
+  }, [token])
+
+  if (!token) {
+    return <Login />
+  }
+
   const fetchData = async () => {
     const ms = await getMonitors().catch(()=>[])
     const gs = await getGroups().catch(()=>[])
@@ -39,6 +43,11 @@ export default function Admin() {
     Message.success('系统设置已保存')
   }
   const goDashboard = () => { window.location.href = '/' }
+  const logout = () => {
+    setToken('')
+    setTokenState('')
+    window.location.reload()
+  }
   const columns = [
     { title: '名称', dataIndex: 'name' },
     { title: '状态', render: (_: any, r: Monitor) => <Tag color={r.last_online ? 'green' : 'red'}>{r.last_online ? '在线' : '离线'}</Tag> },
@@ -50,50 +59,65 @@ export default function Admin() {
     { title: '最近检查', render: (_:any, r:Monitor)=> r.last_checked_at ? new Date(r.last_checked_at).toLocaleString() : '-' },
     { title: '操作', render: (_:any, r:Monitor)=> (
       <Space>
-        <Button size="mini" type="primary" onClick={()=>{ setEditing(r); setShowForm(true) }}>编辑</Button>
-        <Button size="mini" status="danger" onClick={async()=>{ await deleteMonitor(r.id); Message.success('已删除'); fetchData() }}>删除</Button>
+        <Button size="mini" type="primary" icon={<IconEdit />} onClick={()=>{ setEditing(r); setShowForm(true) }}>编辑</Button>
+        <Button size="mini" status="danger" icon={<IconDelete />} onClick={async()=>{ await deleteMonitor(r.id); Message.success('已删除'); fetchData() }}>删除</Button>
       </Space>
     ) }
   ]
   const openCreate = () => { setEditing(null); setShowForm(true) }
   const openGroups = () => { setShowGroups(true) }
+  
   return (
-    <div className="min-h-screen bg-white dark:bg-black">
-      <div className="p-4">
-        <Space size={16} className="w-full justify-between">
-          <Typography.Title heading={4} className="text-black dark:text-white">系统管理</Typography.Title>
-          <Space>
-            <Button onClick={goDashboard}>返回首页</Button>
-            <Input.Password placeholder="管理员密码" style={{ width: 200 }} value={adminPw} onChange={(v)=>{ setAdminPw(v); setAdminPassword(v) }} />
-          </Space>
+    <Layout className="min-h-screen bg-gray-50 dark:bg-gray-900">
+      <Layout.Header className="bg-white dark:bg-gray-800 shadow-sm px-6 h-16 flex items-center justify-between sticky top-0 z-50">
+        <div className="flex items-center">
+          <Typography.Title heading={5} style={{ margin: 0 }}>系统管理</Typography.Title>
+        </div>
+        <Space>
+          <Switch checked={dark} onChange={setDark} checkedIcon={<IconMoonFill />} uncheckedIcon={<IconSun />} />
+          <Button type="text" icon={<IconHome />} onClick={goDashboard}>返回首页</Button>
+          <Button type="text" status="danger" icon={<IconPoweroff />} onClick={logout}>退出登录</Button>
         </Space>
-        <Divider />
-        <Card>
-          <Space style={{ marginBottom: 12 }}>
-            <Button type="primary" onClick={openCreate}>新建监控</Button>
-            <Button onClick={openGroups}>管理分组</Button>
-          </Space>
-          <Table rowKey="id" columns={columns as any} data={list} pagination={false} />
+      </Layout.Header>
+      <Layout.Content className="px-6 py-4">
+        <Breadcrumb className="mb-4">
+          <Breadcrumb.Item>首页</Breadcrumb.Item>
+          <Breadcrumb.Item>系统管理</Breadcrumb.Item>
+        </Breadcrumb>
+        
+        <Card className="shadow-sm rounded-lg">
+          <Tabs defaultActiveTab="monitors">
+            <Tabs.TabPane key="monitors" title={<span><IconDesktop /> 监控列表</span>}>
+              <div className="mb-4">
+                <Space>
+                  <Button type="primary" icon={<IconPlus />} onClick={openCreate}>新建监控</Button>
+                  <Button icon={<IconSettings />} onClick={openGroups}>管理分组</Button>
+                </Space>
+              </div>
+              <Table rowKey="id" columns={columns as any} data={list} pagination={false} />
+            </Tabs.TabPane>
+            <Tabs.TabPane key="settings" title={<span><IconSettings /> 系统设置</span>}>
+              <div className="max-w-3xl">
+                <Typography.Title heading={6} className="mb-4">全局配置</Typography.Title>
+                <Form form={form} layout="vertical">
+                  <Grid.Row gutter={24}>
+                    <Grid.Col span={8}><Form.Item label="数据保留天数" field="retention_days" rules={[{ required: true }]}><InputNumber min={1} /></Form.Item></Grid.Col>
+                    <Grid.Col span={8}><Form.Item label="震荡次数阈值" field="flap_threshold" rules={[{ required: true }]}><InputNumber min={1} /></Form.Item></Grid.Col>
+                    <Grid.Col span={8}><Form.Item label="默认检查间隔(秒)" field="check_interval_seconds" rules={[{ required: true }]}><InputNumber min={10} /></Form.Item></Grid.Col>
+                  </Grid.Row>
+                </Form>
+                <Divider />
+                <Button type="primary" onClick={save}>保存设置</Button>
+                <div className="text-xs text-gray-500 mt-2">说明：未在监控表单中设置检查间隔时，将使用此默认值；若监控表单填写了检查间隔，则以监控表单为准。</div>
+              </div>
+            </Tabs.TabPane>
+          </Tabs>
         </Card>
-        <Divider />
-        <Card>
-          <Typography.Title heading={6}>系统设置</Typography.Title>
-          <Form form={form} layout="vertical">
-            <Grid.Row gutter={16}>
-              <Grid.Col span={8}><Form.Item label="数据保留天数" field="retention_days" rules={[{ required: true }]}><InputNumber min={1} /></Form.Item></Grid.Col>
-              <Grid.Col span={8}><Form.Item label="震荡次数阈值" field="flap_threshold" rules={[{ required: true }]}><InputNumber min={1} /></Form.Item></Grid.Col>
-              <Grid.Col span={8}><Form.Item label="默认检查间隔(秒)" field="check_interval_seconds" rules={[{ required: true }]}><InputNumber min={10} /></Form.Item></Grid.Col>
-            </Grid.Row>
-          </Form>
-          <Space>
-            <Button type="primary" onClick={save}>保存</Button>
-          </Space>
-          <div className="text-xs text-gray-500 mt-2">说明：未在监控表单中设置检查间隔时，将使用此默认值；若监控表单填写了检查间隔，则以监控表单为准。</div>
-        </Card>
-        <MonitorForm visible={showForm} onClose={()=>setShowForm(false)} editing={editing} groups={groups} onOk={()=>{ setShowForm(false); fetchData() }} />
-        <GroupManager visible={showGroups} onClose={()=>setShowGroups(false)} groups={groups} onOk={()=>{ setShowGroups(false); fetchData() }} />
-      </div>
-    </div>
+      </Layout.Content>
+
+      <MonitorForm visible={showForm} onClose={()=>setShowForm(false)} editing={editing} groups={groups} onOk={()=>{ setShowForm(false); fetchData() }} />
+      <GroupManager visible={showGroups} onClose={()=>setShowGroups(false)} groups={groups} onOk={()=>{ setShowGroups(false); fetchData() }} />
+    </Layout>
   )
 }
 

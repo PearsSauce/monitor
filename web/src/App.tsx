@@ -1,9 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import { Button, Card, Divider, Drawer, Form, Grid, Input, InputNumber, Message, Modal, Select, Space, Switch, Table, Tag, Typography } from '@arco-design/web-react'
-import { IconMoonFill, IconSun, IconSync, IconArrowLeft } from '@arco-design/web-react/icon'
-import { createGroup, createMonitor, deleteGroup, getGroups, getHistory, getHistoryByDay, getMonitors, getSSL, getSetupState, postSetup, updateGroup, updateMonitor, setAdminPassword, getSettings, updateSettings, verifyAdmin, getNotifications, getLatestResult, getGlobalTrend } from './api'
+import { Button, Card, Divider, Drawer, Form, Grid, Input, InputNumber, Message, Modal, Select, Space, Switch, Table, Tag, Typography, Layout, Menu, Breadcrumb, Avatar, Dropdown } from '@arco-design/web-react'
+import { IconMoonFill, IconSun, IconSync, IconArrowLeft, IconDesktop, IconCheckCircle, IconCloseCircle, IconClockCircle, IconHome, IconNotification, IconUser } from '@arco-design/web-react/icon'
+import { createGroup, createMonitor, deleteGroup, getGroups, getHistory, getHistoryByDay, getMonitors, getSSL, getSetupState, postSetup, updateGroup, updateMonitor, getSettings, updateSettings, getNotifications, getLatestResult, getGlobalTrend, login, getToken } from './api'
 import { ResponseTrendChart, ResponseDistChart } from './components/ChartComponents'
 import { NotificationTicker } from './components/NotificationTicker'
+import useTheme from './useTheme'
 
 type Monitor = {
   id: number
@@ -32,16 +33,6 @@ type Group = { id:number; name:string; icon?:string; color?:string }
 type SSLInfo = { expires_at?:string; issuer?:string; days_left?:number } | null
 type NotificationItem = { id:number; monitor_id:number; created_at:string; type:string; message:string; monitor_name:string }
 
-function useDarkMode() {
-  const [dark, setDark] = useState<boolean>(false)
-  useEffect(() => {
-    const root = document.documentElement
-    if (dark) root.classList.add('dark')
-    else root.classList.remove('dark')
-  }, [dark])
-  return { dark, setDark }
-}
-
 export default function App() {
   const [loading, setLoading] = useState(false)
   const [list, setList] = useState<Monitor[]>([])
@@ -51,7 +42,7 @@ export default function App() {
   const [latest, setLatest] = useState<Record<number, number>>({})
   const [showDetail, setShowDetail] = useState(false)
   const [detailId, setDetailId] = useState<number | null>(null)
-  const { dark, setDark } = useDarkMode()
+  const { dark, setDark } = useTheme()
   const [showLogin, setShowLogin] = useState(false)
   const [needSetup, setNeedSetup] = useState(false)
   const [notices, setNotices] = useState<NotificationItem[]>([])
@@ -196,105 +187,146 @@ export default function App() {
   ]
 
   return (
-    <div className="min-h-screen bg-white dark:bg-black">
-      <div className="p-4">
-        <Space size={16} className="w-full justify-between">
-          <Typography.Title heading={4} className="text-black dark:text-white">网站监控</Typography.Title>
-          <Space>
-            <Button icon={<IconSync />} onClick={fetchData} loading={loading}>刷新</Button>
-            <Select style={{ width: 200 }} placeholder="分组筛选" value={groupFilter} onChange={setGroupFilter} allowClear>
-              <Select.Option value={'all' as any}>全部</Select.Option>
-              {(groups || []).map(g => <Select.Option key={g.id} value={g.id}>{g.name}</Select.Option>)}
-            </Select>
-            <Button onClick={() => setShowLogin(true)}>登录</Button>
-            <Switch checked={dark} onChange={setDark} checkedIcon={<IconMoonFill />} uncheckedIcon={<IconSun />} />
-          </Space>
+    <Layout className="min-h-screen bg-gray-50 dark:bg-gray-900">
+      <Layout.Header className="bg-white dark:bg-gray-800 shadow-sm px-6 h-16 flex items-center justify-between sticky top-0 z-50">
+        <div className="flex items-center">
+          <div className="w-8 h-8 bg-blue-600 rounded mr-3 flex items-center justify-center">
+            <IconDesktop style={{ color: '#fff', fontSize: 20 }} />
+          </div>
+          <Typography.Title heading={5} style={{ margin: 0 }}>网站监控系统</Typography.Title>
+        </div>
+        <Space size="medium">
+          <Button icon={<IconSync />} onClick={fetchData} loading={loading} type="secondary">刷新</Button>
+          <Select style={{ width: 160 }} placeholder="分组筛选" value={groupFilter} onChange={setGroupFilter} allowClear triggerProps={{ autoAlignPopupWidth: false, autoAlignPopupMinWidth: true, position: 'bl' }}>
+            <Select.Option value={'all' as any}>全部项目</Select.Option>
+            {(groups || []).map(g => <Select.Option key={g.id} value={g.id}>{g.name}</Select.Option>)}
+          </Select>
+          <Switch checked={dark} onChange={setDark} checkedIcon={<IconMoonFill />} uncheckedIcon={<IconSun />} />
+          <Button type="primary" onClick={() => {
+            if (getToken()) window.location.href = '/admin'
+            else setShowLogin(true)
+          }} icon={<IconUser />}>管理员登录</Button>
         </Space>
-        <Divider />
-        
+      </Layout.Header>
+      
+      <Layout className="px-6 py-4">
         {view === 'dashboard' ? (
-          <>
-            <Card>
-              <Grid.Row gutter={16}>
-                <Grid.Col span={6}>
-                  <Card>
-                    <Typography.Text style={{ color: 'var(--color-text-1)' }}>总站点数</Typography.Text>
-                    <div className="text-2xl mt-2 text-black dark:text-white">{totalCount}</div>
-                  </Card>
-                </Grid.Col>
-                <Grid.Col span={6}>
-                  <Card>
-                    <Typography.Text style={{ color: 'var(--color-text-1)' }}>在线站点</Typography.Text>
-                    <div className="text-2xl mt-2 text-green-600">{onlineCount}</div>
-                  </Card>
-                </Grid.Col>
-                <Grid.Col span={6}>
-                  <Card>
-                    <Typography.Text style={{ color: 'var(--color-text-1)' }}>离线站点</Typography.Text>
-                    <div className="text-2xl mt-2 text-red-600">{offlineCount}</div>
-                  </Card>
-                </Grid.Col>
-                <Grid.Col span={6}>
-                  <Card>
-                    <Typography.Text style={{ color: 'var(--color-text-1)' }}>平均响应</Typography.Text>
-                    <div className="text-2xl mt-2 text-blue-600">{avgRespAll}</div>
-                  </Card>
-                </Grid.Col>
-              </Grid.Row>
-            </Card>
+          <Layout.Content>
+            <div className="mb-4">
+               <NotificationTicker notices={notices} onClick={() => setView('notifications')} isDark={dark} />
+            </div>
+            
+            <Grid.Row gutter={16}>
+              <Grid.Col span={6}>
+                <Card className="hover:shadow-md transition-shadow duration-300">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <Typography.Text className="text-gray-500">总站点数</Typography.Text>
+                      <div className="text-3xl mt-2 font-bold text-gray-800 dark:text-gray-100">{totalCount}</div>
+                    </div>
+                    <div className="p-3 bg-blue-50 dark:bg-blue-900 rounded-full">
+                      <IconDesktop className="text-blue-600 dark:text-blue-100 text-xl" />
+                    </div>
+                  </div>
+                </Card>
+              </Grid.Col>
+              <Grid.Col span={6}>
+                <Card className="hover:shadow-md transition-shadow duration-300">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <Typography.Text className="text-gray-500">在线站点</Typography.Text>
+                      <div className="text-3xl mt-2 font-bold text-green-600">{onlineCount}</div>
+                    </div>
+                    <div className="p-3 bg-green-50 dark:bg-green-900 rounded-full">
+                      <IconCheckCircle className="text-green-600 dark:text-green-100 text-xl" />
+                    </div>
+                  </div>
+                </Card>
+              </Grid.Col>
+              <Grid.Col span={6}>
+                <Card className="hover:shadow-md transition-shadow duration-300">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <Typography.Text className="text-gray-500">离线站点</Typography.Text>
+                      <div className="text-3xl mt-2 font-bold text-red-600">{offlineCount}</div>
+                    </div>
+                    <div className="p-3 bg-red-50 dark:bg-red-900 rounded-full">
+                      <IconCloseCircle className="text-red-600 dark:text-red-100 text-xl" />
+                    </div>
+                  </div>
+                </Card>
+              </Grid.Col>
+              <Grid.Col span={6}>
+                <Card className="hover:shadow-md transition-shadow duration-300">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <Typography.Text className="text-gray-500">平均响应</Typography.Text>
+                      <div className="text-3xl mt-2 font-bold text-blue-600">{avgRespAll}</div>
+                    </div>
+                    <div className="p-3 bg-indigo-50 dark:bg-indigo-900 rounded-full">
+                      <IconClockCircle className="text-indigo-600 dark:text-indigo-100 text-xl" />
+                    </div>
+                  </div>
+                </Card>
+              </Grid.Col>
+            </Grid.Row>
             
             <Grid.Row gutter={16} className="mt-4">
               <Grid.Col span={16}>
-                <Card>
+                <Card title="24小时响应趋势" className="h-full hover:shadow-md transition-shadow">
                   <ResponseTrendChart data={trendData} isDark={dark} />
                 </Card>
               </Grid.Col>
               <Grid.Col span={8}>
-                <Card>
+                <Card title="当前响应分布" className="h-full hover:shadow-md transition-shadow">
                   <ResponseDistChart data={distData} isDark={dark} />
                 </Card>
               </Grid.Col>
             </Grid.Row>
     
-            <div className="mt-4">
-               <NotificationTicker notices={notices} onClick={() => setView('notifications')} isDark={dark} />
-            </div>
-
-            <Divider />
-            <Card>
-              <Table rowKey="id" columns={columns as any} data={filtered} pagination={false} />
+            <Card className="mt-4 hover:shadow-md transition-shadow" title="监控列表">
+              <Table rowKey="id" columns={columns as any} data={filtered} pagination={false} border={false} />
             </Card>
-          </>
+          </Layout.Content>
         ) : (
-          <Card 
-            title={
-              <Space>
-                <Button icon={<IconArrowLeft />} onClick={() => setView('dashboard')} shape="circle" />
-                <Typography.Text>异常通知历史</Typography.Text>
-              </Space>
-            }
-          >
-            <Table 
-              rowKey="id" 
-              data={notices} 
-              pagination={{ pageSize: 20 }} 
-              columns={[
-                { title: '时间', dataIndex: 'created_at', width: 200,
-                  render: (v:any)=> (v ? new Date(v).toLocaleString() : '-') },
-                { title: '站点', dataIndex: 'monitor_name', width: 200 },
-                { title: '类型', dataIndex: 'type', width: 120,
-                  render: (v:any)=> <Tag color={v==='status_change'?'red':v==='ssl_expiry'?'orange':'blue'}>{v==='status_change'?'状态变更':v==='ssl_expiry'?'SSL过期':v}</Tag> },
-                { title: '消息', dataIndex: 'message' }
-              ] as any} 
-            />
-          </Card>
+          <Layout.Content>
+            <Breadcrumb className="mb-4">
+              <Breadcrumb.Item onClick={() => setView('dashboard')} className="cursor-pointer"><IconHome /> 首页</Breadcrumb.Item>
+              <Breadcrumb.Item>异常通知历史</Breadcrumb.Item>
+            </Breadcrumb>
+            <Card 
+              title={
+                <Space>
+                  <Button icon={<IconArrowLeft />} onClick={() => setView('dashboard')} shape="circle" />
+                  <Typography.Text>异常通知历史</Typography.Text>
+                </Space>
+              }
+            >
+              <Table 
+                rowKey="id" 
+                data={notices} 
+                pagination={{ pageSize: 20 }} 
+                columns={[
+                  { title: '时间', dataIndex: 'created_at', width: 200,
+                    render: (v:any)=> (v ? new Date(v).toLocaleString() : '-') },
+                  { title: '站点', dataIndex: 'monitor_name', width: 200 },
+                  { title: '类型', dataIndex: 'type', width: 120,
+                    render: (v:any)=> <Tag color={v==='status_change'?'red':v==='ssl_expiry'?'orange':'blue'}>{v==='status_change'?'状态变更':v==='ssl_expiry'?'SSL过期':v}</Tag> },
+                  { title: '消息', dataIndex: 'message' }
+                ] as any} 
+              />
+            </Card>
+          </Layout.Content>
         )}
+        <Layout.Footer className="text-center text-gray-400 py-8">
+          Monitor System ©2024 Created with Arco Design
+        </Layout.Footer>
+      </Layout>
 
-        {showDetail && detailId !== null && <DetailDrawer id={detailId} onClose={() => setShowDetail(false)} />}
-        {needSetup && <SetupWizard onDone={async () => { setNeedSetup(false); await fetchData() }} />}
-        {showLogin && <LoginModal onClose={()=>setShowLogin(false)} />}
-      </div>
-    </div>
+      {showDetail && detailId !== null && <DetailDrawer id={detailId} onClose={() => setShowDetail(false)} />}
+      {needSetup && <SetupWizard onDone={async () => { setNeedSetup(false); await fetchData() }} />}
+      {showLogin && <LoginModal onClose={()=>setShowLogin(false)} />}
+    </Layout>
   )
 }
 
@@ -332,7 +364,7 @@ function StatusBar({ monitorId }: { monitorId: number }) {
     getHistoryByDay(monitorId, 30).then(setItems).catch(() => {})
   }, [monitorId])
   const blocks = useMemo(() => {
-    return items.slice(0, 30).map((i, idx) => {
+    return (items || []).slice(0, 30).map((i, idx) => {
       const ratio = i.total_count ? i.online_count / i.total_count : 0
       const color = ratio >= 0.8 ? 'bg-green-500' : ratio >= 0.5 ? 'bg-yellow-500' : 'bg-red-500'
       return <div title={`${i.day} 在线率 ${Math.round(ratio*100)}%`} key={idx} className={`h-3 w-3 mr-1 rounded ${color}`}></div>
@@ -429,7 +461,7 @@ function DetailDrawer({ id, onClose }: { id: number; onClose: () => void }) {
   }, [items])
   const spark = useMemo(() => {
     const w = 480, h = 80
-    const data = days.slice().reverse()
+    const data = (days || []).slice().reverse()
     const max = Math.max(...data.map(d => d.avg_response_ms || 0), 1)
     const step = data.length ? w / data.length : w
     const points = data.map((d, i) => {
@@ -506,8 +538,7 @@ function LoginModal({ onClose }: { onClose: () => void }) {
     const v = await form.validate()
     try {
       setLoading(true)
-      await verifyAdmin(v.password)
-      setAdminPassword(v.password)
+      await login(v.password)
       Message.success('登录成功')
       window.location.href = '/admin'
     } catch (e:any) {
@@ -559,3 +590,4 @@ function GroupManager({ visible, onClose, groups, onOk }: { visible: boolean; on
     </Modal>
   )
 }
+

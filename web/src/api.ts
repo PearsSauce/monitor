@@ -24,36 +24,52 @@ export async function getGroups() {
   return res.json()
 }
 
-let ADMIN_PASSWORD = ''
+let TOKEN = ''
 try {
-  const saved = typeof localStorage !== 'undefined' ? localStorage.getItem('ADMIN_PASSWORD') : null
-  if (saved) ADMIN_PASSWORD = saved
+  const saved = typeof localStorage !== 'undefined' ? localStorage.getItem('AUTH_TOKEN') : null
+  if (saved) TOKEN = saved
 } catch {}
-export function setAdminPassword(pw: string) {
-  ADMIN_PASSWORD = pw || ''
+
+export function setToken(t: string) {
+  TOKEN = t || ''
   try {
-    if (pw) localStorage.setItem('ADMIN_PASSWORD', pw)
-    else localStorage.removeItem('ADMIN_PASSWORD')
+    if (t) localStorage.setItem('AUTH_TOKEN', t)
+    else localStorage.removeItem('AUTH_TOKEN')
   } catch {}
 }
-function adminHeaders(): Record<string, string> {
-  const h: Record<string, string> = {}
-  if (ADMIN_PASSWORD) h['X-Admin-Password'] = ADMIN_PASSWORD
-  return h
+
+export function getToken() {
+  return TOKEN
+}
+
+function authHeader(): Record<string, string> {
+  if (TOKEN) return { 'Authorization': `Bearer ${TOKEN}` }
+  return {}
+}
+
+export async function login(password: string) {
+  const res = await fetch('/api/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ password })
+  })
+  if (!res.ok) throw new Error(res.status === 401 ? '密码错误' : '登录失败')
+  const data = await res.json()
+  setToken(data.token)
 }
 
 export async function createGroup(payload: any) {
-  const res = await fetch('/api/groups', { method: 'POST', headers: { 'Content-Type': 'application/json', ...adminHeaders() }, body: JSON.stringify(payload) })
+  const res = await fetch('/api/groups', { method: 'POST', headers: { 'Content-Type': 'application/json', ...authHeader() }, body: JSON.stringify(payload) })
   if (!res.ok) throw new Error('创建分组失败')
 }
 
 export async function updateGroup(id: number, payload: any) {
-  const res = await fetch(`/api/groups/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json', ...adminHeaders() }, body: JSON.stringify(payload) })
+  const res = await fetch(`/api/groups/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json', ...authHeader() }, body: JSON.stringify(payload) })
   if (!res.ok) throw new Error('更新分组失败')
 }
 
 export async function deleteGroup(id: number) {
-  const res = await fetch(`/api/groups/${id}`, { method: 'DELETE', headers: adminHeaders() })
+  const res = await fetch(`/api/groups/${id}`, { method: 'DELETE', headers: authHeader() })
   if (!res.ok) throw new Error('删除分组失败')
 }
 
@@ -65,17 +81,17 @@ export async function getSSL(id: number) {
 }
 
 export async function createMonitor(payload: any) {
-  const res = await fetch('/api/monitors', { method: 'POST', headers: { 'Content-Type': 'application/json', ...adminHeaders() }, body: JSON.stringify(payload) })
+  const res = await fetch('/api/monitors', { method: 'POST', headers: { 'Content-Type': 'application/json', ...authHeader() }, body: JSON.stringify(payload) })
   if (!res.ok) throw new Error('创建失败')
 }
 
 export async function updateMonitor(id: number, payload: any) {
-  const res = await fetch(`/api/monitors/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json', ...adminHeaders() }, body: JSON.stringify(payload) })
+  const res = await fetch(`/api/monitors/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json', ...authHeader() }, body: JSON.stringify(payload) })
   if (!res.ok) throw new Error('更新失败')
 }
 
 export async function deleteMonitor(id: number) {
-  const res = await fetch(`/api/monitors/${id}`, { method: 'DELETE', headers: adminHeaders() })
+  const res = await fetch(`/api/monitors/${id}`, { method: 'DELETE', headers: authHeader() })
   if (!res.ok) throw new Error('删除失败')
 }
 
@@ -97,16 +113,8 @@ export async function getSettings() {
 }
 
 export async function updateSettings(payload: any) {
-  const res = await fetch('/api/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json', ...adminHeaders() }, body: JSON.stringify(payload) })
+  const res = await fetch('/api/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json', ...authHeader() }, body: JSON.stringify(payload) })
   if (!res.ok) throw new Error('更新设置失败')
-}
-
-export async function verifyAdmin(pw: string) {
-  const res = await fetch('/api/admin/verify', { method: 'GET', headers: { 'X-Admin-Password': pw } })
-  if (res.status === 204) return true
-  if (res.status === 401) throw new Error('密码错误')
-  if (!res.ok) throw new Error('网络错误')
-  return true
 }
 
 export async function getNotifications(limit = 20) {
