@@ -310,8 +310,22 @@ export default function App() {
                   { title: '时间', dataIndex: 'created_at', width: 200,
                     render: (v:any)=> (v ? new Date(v).toLocaleString() : '-') },
                   { title: '站点', dataIndex: 'monitor_name', width: 200 },
-                  { title: '类型', dataIndex: 'type', width: 120,
-                    render: (v:any)=> <Tag color={v==='status_change'?'red':v==='ssl_expiry'?'orange':'blue'}>{v==='status_change'?'状态变更':v==='ssl_expiry'?'SSL过期':v}</Tag> },
+                  { title: '类型', dataIndex: 'type', width: 120, align: 'center',
+                    render: (v:any, r:any)=> {
+                      let color = 'arcoblue'
+                      let text = v
+                      if (v === 'status_change') {
+                        const msg = (r.message || '').toLowerCase()
+                        const isRecovery = msg.includes('恢复') || msg.includes('online') || msg.includes('up') || msg.includes('ok')
+                        color = isRecovery ? 'green' : 'red'
+                        text = isRecovery ? '服务恢复' : '服务离线'
+                      } else if (v === 'ssl_expiry') {
+                        color = 'orange'
+                        text = 'SSL过期'
+                      }
+                      return <Tag color={color}>{text}</Tag> 
+                    }
+                  },
                   { title: '消息', dataIndex: 'message' }
                 ] as any} 
               />
