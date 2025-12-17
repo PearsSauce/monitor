@@ -97,6 +97,10 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("/api/groups/", s.handleGroupByID)
 	s.mux.HandleFunc("/api/notifications", s.handleNotifications)
 	s.mux.HandleFunc("/api/notifications/test", s.handleNotificationsTest)
+	s.mux.HandleFunc("/api/public/subscribe", s.handlePublicSubscribe)
+	s.mux.HandleFunc("/api/subscriptions/verify", s.handleSubscriptionVerify)
+	s.mux.HandleFunc("/api/subscriptions", s.handleSubscriptions)
+	s.mux.HandleFunc("/api/subscriptions/", s.handleSubscriptionByID)
 	s.mux.HandleFunc("/api/events", s.handleEvents)
 	s.mux.HandleFunc("/api/ssl/", s.handleSSL)
 	s.mux.HandleFunc("/api/setup/state", s.handleSetupState)
@@ -271,6 +275,100 @@ func (s *Server) handleGroupByID(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func (s *Server) handlePublicSubscribe(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		w.WriteHeader(405)
+		return
+	}
+	var in struct {
+		MonitorID    int      `json:"monitor_id"`
+		Email        string   `json:"email"`
+		NotifyEvents []string `json:"notify_events"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+		http.Error(w, "invalid json", 400)
+		return
+	}
+	if in.MonitorID <= 0 || strings.TrimSpace(in.Email) == "" || len(in.NotifyEvents) == 0 {
+		http.Error(w, "missing fields", 400)
+		return
+	}
+	if !strings.Contains(in.Email, "@") {
+		http.Error(w, "invalid email", 400)
+		return
+	}
+	var name, url string
+	_ = s.s.DB().QueryRow(`SELECT COALESCE(name,''), COALESCE(url,'') FROM monitors WHERE id=$1`, in.MonitorID).Scan(&name, &url)
+	var smtpServer sql.NullString
+	var smtpPort sql.NullInt64
+	var smtpUser sql.NullString
+	var smtpPassword sql.NullString
+	var fromEmail sql.NullString
+	var siteName sql.NullString
+	_ = s.s.DB().QueryRow(`SELECT smtp_server, smtp_port, smtp_user, smtp_password, from_email, site_name FROM app_settings ORDER BY id DESC LIMIT 1`).
+		Scan(&smtpServer, &smtpPort, &smtpUser, &smtpPassword, &fromEmail, &siteName)
+	host := ifNullStr(smtpServer, "")
+	user := ifNullStr(smtpUser, "")
+	pass := ifNullStr(smtpPassword, "")
+	port := ifNullInt(smtpPort, 0)
+	from := ifNullStr(fromEmail, "")
+	if strings.TrimSpace(host) == "" || port <= 0 || strings.TrimSpace(user) == "" || strings.TrimSpace(pass) == "" || strings.TrimSpace(from) == "" {
+		http.Error(w, "SMTP未配置", 400)
+		return
+	}
+	token := hex.EncodeToString(sha256.New().Sum([]byte(strconv.Itoa(in.MonitorID) + "|" + in.Email + "|" + strconv.FormatInt(time.Now().UnixNano(), 10))))
+	expires := time.Now().Add(24 * time.Hour)
+	ev := strings.Join(in.NotifyEvents, ",")
+	id := nextID()
+	_, _ = s.s.DB().Exec(`DELETE FROM monitor_subscriptions WHERE monitor_id=$1 AND email=$2`, in.MonitorID, in.Email)
+	_, err := s.s.DB().Exec(`INSERT INTO monitor_subscriptions(id, monitor_id, email, notify_events, verified, verify_token, verify_expires) VALUES($1,$2,$3,$4,false,$5,$6)`,
+		id, in.MonitorID, in.Email, ev, token, expires)
+	if err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
+	proto := "http"
+	if strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https") {
+		proto = "https"
+	}
+	verifyURL := proto + "://" + r.Host + "/api/subscriptions/verify?token=" + token
+	subject := "订阅验证 · " + name + " ｜ " + ifNullStr(siteName, "服务监控系统")
+	html := notify.BodySubscriptionVerify(ifNullStr(siteName, "服务监控系统"), name, verifyURL)
+	go notify.SendSMTP(host, port, user, pass, from, in.Email, subject, html)
+	w.WriteHeader(201)
+}
+
+func (s *Server) handleSubscriptionVerify(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		w.WriteHeader(405)
+		return
+	}
+	token := r.URL.Query().Get("token")
+	if strings.TrimSpace(token) == "" {
+		http.Error(w, "missing token", 400)
+		return
+	}
+	var id int64
+	var expires time.Time
+	err := s.s.DB().QueryRow(`SELECT id, verify_expires FROM monitor_subscriptions WHERE verify_token=$1`, token).Scan(&id, &expires)
+	if err != nil {
+		http.Error(w, "invalid token", 400)
+		return
+	}
+	if time.Now().After(expires) {
+		http.Error(w, "token expired", 400)
+		return
+	}
+	_, err = s.s.DB().Exec(`UPDATE monitor_subscriptions SET verified=true, verify_token=NULL, verify_expires=NULL WHERE id=$1`, id)
+	if err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	var siteName sql.NullString
+	_ = s.s.DB().QueryRow(`SELECT site_name FROM app_settings ORDER BY id DESC LIMIT 1`).Scan(&siteName)
+	_, _ = w.Write([]byte(notify.PageSubscriptionVerifySuccess(ifNullStr(siteName, "服务监控系统"))))
+}
 func (s *Server) handleSetupState(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		w.WriteHeader(405)
@@ -521,6 +619,23 @@ func (s *Server) handleMonitorByID(w http.ResponseWriter, r *http.Request) {
 		default:
 			w.WriteHeader(405)
 		}
+		return
+	}
+	if len(parts) > 1 && parts[1] == "subscriptions" {
+		if r.Method != http.MethodDelete {
+			w.WriteHeader(405)
+			return
+		}
+		if !s.adminOK(r) {
+			http.Error(w, "unauthorized", 401)
+			return
+		}
+		_, err := s.s.DB().Exec(`DELETE FROM monitor_subscriptions WHERE monitor_id=$1`, id)
+		if err != nil {
+			http.Error(w, err.Error(), 500)
+			return
+		}
+		w.WriteHeader(204)
 		return
 	}
 	switch r.Method {
@@ -1043,6 +1158,129 @@ func (s *Server) handleGroups(w http.ResponseWriter, r *http.Request) {
 		}
 		w.WriteHeader(201)
 	default:
+		w.WriteHeader(405)
+	}
+}
+
+func (s *Server) handleSubscriptions(w http.ResponseWriter, r *http.Request) {
+	if !s.adminOK(r) {
+		http.Error(w, "unauthorized", 401)
+		return
+	}
+	switch r.Method {
+	case http.MethodGet:
+		midStr := r.URL.Query().Get("monitor_id")
+		type item struct {
+			ID           int64  `json:"id"`
+			MonitorID    int    `json:"monitor_id"`
+			MonitorName  string `json:"monitor_name"`
+			Email        string `json:"email"`
+			NotifyEvents string `json:"notify_events"`
+			Verified     bool   `json:"verified"`
+			CreatedAt    string `json:"created_at"`
+		}
+		var list []item
+		if strings.TrimSpace(midStr) == "" {
+			rows, err := s.s.DB().Query(`SELECT s.id, s.monitor_id, m.name, s.email, s.notify_events, s.verified, s.created_at 
+				FROM monitor_subscriptions s 
+				JOIN monitors m ON m.id=s.monitor_id
+				ORDER BY s.created_at DESC`)
+			if err != nil {
+				http.Error(w, err.Error(), 500)
+				return
+			}
+			defer rows.Close()
+			for rows.Next() {
+				var it item
+				var created time.Time
+				if err := rows.Scan(&it.ID, &it.MonitorID, &it.MonitorName, &it.Email, &it.NotifyEvents, &it.Verified, &created); err != nil {
+					http.Error(w, err.Error(), 500)
+					return
+				}
+				it.CreatedAt = created.Format(time.RFC3339)
+				list = append(list, it)
+			}
+		} else {
+			mid, err := strconv.Atoi(midStr)
+			if err != nil || mid <= 0 {
+				http.Error(w, "invalid monitor_id", 400)
+				return
+			}
+			rows, err := s.s.DB().Query(`SELECT s.id, s.monitor_id, m.name, s.email, s.notify_events, s.verified, s.created_at 
+				FROM monitor_subscriptions s 
+				JOIN monitors m ON m.id=s.monitor_id
+				WHERE s.monitor_id=$1
+				ORDER BY s.created_at DESC`, mid)
+			if err != nil {
+				http.Error(w, err.Error(), 500)
+				return
+			}
+			defer rows.Close()
+			for rows.Next() {
+				var it item
+				var created time.Time
+				if err := rows.Scan(&it.ID, &it.MonitorID, &it.MonitorName, &it.Email, &it.NotifyEvents, &it.Verified, &created); err != nil {
+					http.Error(w, err.Error(), 500)
+					return
+				}
+				it.CreatedAt = created.Format(time.RFC3339)
+				list = append(list, it)
+			}
+		}
+		if list == nil {
+			list = []item{}
+		}
+		writeJSON(w, list)
+	case http.MethodPost:
+		var in struct {
+			MonitorID    int      `json:"monitor_id"`
+			Email        string   `json:"email"`
+			NotifyEvents []string `json:"notify_events"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+			http.Error(w, "invalid json", 400)
+			return
+		}
+		if in.MonitorID <= 0 || strings.TrimSpace(in.Email) == "" || len(in.NotifyEvents) == 0 {
+			http.Error(w, "missing fields", 400)
+			return
+		}
+		if !strings.Contains(in.Email, "@") {
+			http.Error(w, "invalid email", 400)
+			return
+		}
+		ev := strings.Join(in.NotifyEvents, ",")
+		id := nextID()
+		_, err := s.s.DB().Exec(`INSERT INTO monitor_subscriptions(id, monitor_id, email, notify_events) VALUES($1, $2, $3, $4)`, id, in.MonitorID, in.Email, ev)
+		if err != nil {
+			http.Error(w, err.Error(), 500)
+			return
+		}
+		w.WriteHeader(201)
+	default:
+		w.WriteHeader(405)
+	}
+}
+
+func (s *Server) handleSubscriptionByID(w http.ResponseWriter, r *http.Request) {
+	if !s.adminOK(r) {
+		http.Error(w, "unauthorized", 401)
+		return
+	}
+	idStr := strings.TrimPrefix(r.URL.Path, "/api/subscriptions/")
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil || id <= 0 {
+		http.Error(w, "invalid id", 400)
+		return
+	}
+	if r.Method == http.MethodDelete {
+		_, err := s.s.DB().Exec(`DELETE FROM monitor_subscriptions WHERE id=$1`, id)
+		if err != nil {
+			http.Error(w, err.Error(), 500)
+			return
+		}
+		w.WriteHeader(204)
+	} else {
 		w.WriteHeader(405)
 	}
 }

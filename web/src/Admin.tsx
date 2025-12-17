@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { Button, Form, Grid, InputNumber, Input, Message, Space, Typography, Card, Divider, Table, Tag, Modal, Select, Layout, Breadcrumb, Tabs, Switch, Checkbox } from '@arco-design/web-react'
 import { IconHome, IconSettings, IconPoweroff, IconPlus, IconDesktop, IconDelete, IconEdit, IconMoonFill, IconSun } from '@arco-design/web-react/icon'
-import { getSettings, updateSettings, getToken, setToken, getMonitors, getGroups, createMonitor, updateMonitor, deleteMonitor, createGroup, updateGroup, deleteGroup } from './api'
+import { getSettings, updateSettings, getToken, setToken, getMonitors, getGroups, createMonitor, updateMonitor, deleteMonitor, createGroup, updateGroup, deleteGroup, deleteSubscription, getAllSubscriptions } from './api'
 import Login from './Login'
 import useTheme from './useTheme'
 
@@ -18,9 +18,11 @@ export default function Admin() {
   const [showForm, setShowForm] = useState(false)
   const [editing, setEditing] = useState<Monitor | null>(null)
   const [showGroups, setShowGroups] = useState(false)
+  
   const [token, setTokenState] = useState(getToken())
   const [testType, setTestType] = useState<'online' | 'offline' | 'ssl_expiry'>('offline')
   const [testMonitor, setTestMonitor] = useState<number | null>(null)
+  const [subsAll, setSubsAll] = useState<Array<{ id:number; monitor_id:number; monitor_name:string; email:string; notify_events:string; verified:boolean; created_at:string }>>([])
 
   useEffect(() => {
     if (!token) return
@@ -69,6 +71,18 @@ export default function Admin() {
     const gs = await getGroups().catch(()=>[])
     setList(Array.isArray(ms) ? ms : [])
     setGroups(Array.isArray(gs) ? gs : [])
+    getAllSubscriptions().then((res:any) => {
+      const arr = Array.isArray(res) ? res : []
+      setSubsAll(arr.map((x:any)=> ({
+        id: Number(x.id),
+        monitor_id: Number(x.monitor_id),
+        monitor_name: String(x.monitor_name||''),
+        email: String(x.email||''),
+        notify_events: String(x.notify_events||''),
+        verified: !!x.verified,
+        created_at: String(x.created_at||'')
+      })))
+    }).catch(()=>setSubsAll([]))
   }
   const saveWebsite = async () => {
     const v = await websiteForm.validate()
@@ -152,12 +166,12 @@ export default function Admin() {
   return (
     <Layout className="min-h-screen bg-slate-50 dark:bg-slate-950 transition-colors duration-300">
       <Layout.Header className="bg-white dark:bg-slate-900 shadow-sm border-b border-slate-200 dark:border-slate-800 px-6 h-16 sticky top-0 z-50 transition-colors duration-300">
-        <div className="w-full max-w-screen-xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <img src="/img/favicon.svg" alt="logo" className="w-8 h-8 rounded-lg shadow-lg shadow-blue-500/30" />
+        <div className="w-full max-w-screen-xl mx-auto flex items-center justify-between h-full">
+          <div className="flex items-center gap-3 group cursor-default">
+            <img src="/img/favicon.svg" alt="logo" className="w-8 h-8 transition-all duration-500 group-hover:rotate-12 group-hover:scale-110" />
             <div className="flex flex-col">
-              <Typography.Title heading={5} style={{ margin: 0 }} className="text-slate-800 dark:text-slate-100">{siteName}</Typography.Title>
-              {subtitle ? <Typography.Text className="text-slate-500 dark:text-slate-400 text-xs">{subtitle}</Typography.Text> : null}
+              <Typography.Title heading={5} style={{ margin: 0 }} className="text-slate-800 dark:text-slate-100 animate-fade-in-up transition-colors duration-300 group-hover:text-blue-600 dark:group-hover:text-blue-400">{siteName}</Typography.Title>
+              {subtitle ? <Typography.Text className="text-slate-500 dark:text-slate-400 text-xs animate-fade-in-up delay-200 ml-8">{subtitle}</Typography.Text> : null}
             </div>
           </div>
           <Space>
@@ -183,6 +197,22 @@ export default function Admin() {
                   <Button icon={<IconSettings />} onClick={openGroups}>分类管理</Button>
                 </Space>
                 <Table rowKey="id" columns={columns as any} data={list} pagination={false} />
+              </div>
+            </Tabs.TabPane>
+            <Tabs.TabPane key="subs" title={<span><IconSettings /> 订阅列表</span>}>
+              <div>
+                <Typography.Title heading={6}>订阅列表</Typography.Title>
+                <Table rowKey="id" data={subsAll} pagination={false} columns={[
+                  { title: '站点', dataIndex: 'monitor_name' },
+                  { title: '邮箱', dataIndex: 'email' },
+                  { title: '类型', dataIndex: 'notify_events', render: (v:any)=> {
+                    const evs = String(v||'').split(',').map((s)=>s.trim()).filter(Boolean)
+                    return <Space>{evs.map((e,idx)=><Tag key={idx}>{e==='offline'?'离线':e==='online'?'恢复':'证书到期'}</Tag>)}</Space>
+                  }},
+                  { title: '状态', dataIndex: 'verified', render: (v:any)=> <Tag color={v?'green':'arcoblue'}>{v?'已验证':'待验证'}</Tag> },
+                  { title: '时间', dataIndex: 'created_at', render: (v:any)=> (v ? new Date(v).toLocaleString() : '-') },
+                  { title: '操作', render: (_:any, r:any)=> <Button size="mini" status="danger" onClick={async()=>{ await deleteSubscription(r.id); Message.success('已删除'); setSubsAll(prev=>prev.filter(x=>x.id!==r.id)) }}>删除</Button> }
+                ] as any} />
               </div>
             </Tabs.TabPane>
             <Tabs.TabPane key="website" title={<span><IconSettings /> 网站设置</span>}>
@@ -266,6 +296,7 @@ export default function Admin() {
 
       <MonitorForm visible={showForm} onClose={()=>setShowForm(false)} editing={editing} groups={groups} onOk={()=>{ setShowForm(false); fetchData() }} />
       <GroupManager visible={showGroups} onClose={()=>setShowGroups(false)} groups={groups} onOk={()=>{ setShowGroups(false); fetchData() }} />
+      
     </Layout>
   )
 }

@@ -156,3 +156,53 @@ func cnEventLabel(e string) string {
 		return "未知"
 	}
 }
+
+func BodySubscriptionVerify(siteName, monitorName, verifyURL string) string {
+	badge := `<span class="badge badge--ok">订阅验证</span>`
+	content := `<div class="section">您收到这封邮件是因为您（或其他人）申请订阅了 <b>` + safe(monitorName) + `</b> 的服务状态通知。</div>
+<div class="section">
+  <div class="kv">请点击下方按钮完成验证（24小时内有效）：</div>
+  <div style="margin: 24px 0;">
+    <a href="` + verifyURL + `" style="display:inline-block;background:#165DFF;color:#fff;padding:10px 24px;border-radius:4px;font-weight:500;text-decoration:none;">验证订阅</a>
+  </div>
+  <div class="kv" style="font-size:12px;color:#86909C;">如果按钮无法点击，请复制以下链接到浏览器打开：<br/>` + verifyURL + `</div>
+</div>`
+	footer := `如果这不是您的操作，请忽略此邮件。`
+	return htmlShell(siteName, "订阅验证", badge, content, footer)
+}
+
+func PageSubscriptionVerifySuccess(siteName string) string {
+	return `<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>验证成功 - ` + safe(siteName) + `</title>
+  <style>
+    body { margin: 0; padding: 0; background: #f2f3f5; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; color: #1d2129; }
+    .card { background: #fff; width: 100%; max-width: 480px; margin: 20px; padding: 48px 32px; border-radius: 4px; box-shadow: 0 4px 10px rgba(0,0,0,0.05); text-align: center; }
+    .icon-box { width: 72px; height: 72px; margin: 0 auto 24px; background: #e8ffea; border-radius: 50%; display: flex; align-items: center; justify-content: center; }
+    .icon { width: 36px; height: 36px; color: #00b42a; }
+    .title { font-size: 20px; font-weight: 600; margin-bottom: 12px; }
+    .desc { font-size: 14px; color: #86909c; line-height: 1.6; margin-bottom: 32px; }
+    .btn { display: inline-block; background: #165dff; color: #fff; padding: 8px 24px; border-radius: 2px; text-decoration: none; font-size: 14px; transition: background .2s; cursor: pointer; border: none; }
+    .btn:hover { background: #0e42d2; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="icon-box">
+      <svg class="icon" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="butt" stroke-linejoin="miter">
+        <path d="M41.5 10 19.97 38.33 7.5 25.126" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </div>
+    <div class="title">验证成功</div>
+    <div class="desc">
+      您已成功订阅服务状态通知。<br/>
+      当服务状态发生变更时，我们将第一时间通过邮件通知您。
+    </div>
+    <a href="/" class="btn">返回首页</a>
+  </div>
+</body>
+</html>`
+}

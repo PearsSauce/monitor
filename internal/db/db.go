@@ -63,6 +63,17 @@ func Migrate(db *sql.DB) error {
 			type TEXT NOT NULL,
 			message TEXT
 		);`,
+		`CREATE TABLE IF NOT EXISTS monitor_subscriptions (
+			id BIGSERIAL PRIMARY KEY,
+			monitor_id BIGINT NOT NULL REFERENCES monitors(id) ON DELETE CASCADE,
+			email TEXT NOT NULL,
+			notify_events TEXT NOT NULL,
+			created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+			verified BOOLEAN DEFAULT FALSE,
+			verify_token TEXT,
+			verify_expires TIMESTAMPTZ
+		);`,
+		`CREATE INDEX IF NOT EXISTS idx_sub_monitor ON monitor_subscriptions(monitor_id);`,
 		`CREATE TABLE IF NOT EXISTS admin_users (
 			id SERIAL PRIMARY KEY,
 			email TEXT UNIQUE NOT NULL,

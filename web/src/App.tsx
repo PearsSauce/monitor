@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import { Button, Card, Divider, Drawer, Form, Grid, Input, InputNumber, Message, Modal, Select, Space, Switch, Table, Tag, Typography, Layout, Menu, Breadcrumb, Avatar, Dropdown } from '@arco-design/web-react'
-import { IconMoonFill, IconSun, IconSync, IconArrowLeft, IconDesktop, IconCheckCircle, IconCloseCircle, IconClockCircle, IconHome, IconNotification, IconUser, IconLaunch } from '@arco-design/web-react/icon'
+import { Button, Card, Divider, Drawer, Form, Grid, Input, InputNumber, Message, Modal, Select, Space, Switch, Table, Tag, Typography, Layout, Menu, Breadcrumb, Avatar, Dropdown, Checkbox } from '@arco-design/web-react'
+import { IconMoonFill, IconSun, IconArrowLeft, IconDesktop, IconCheckCircle, IconCloseCircle, IconClockCircle, IconHome, IconNotification, IconUser, IconLaunch } from '@arco-design/web-react/icon'
 import { createGroup, createMonitor, deleteGroup, getGroups, getHistory, getHistoryByDay, getMonitors, getSSL, getSetupState, postSetup, updateGroup, updateMonitor, getSettings, updateSettings, getNotifications, getLatestResult, login, getToken } from './api'
 // 移除趋势与分布图组件
 import { NotificationTicker } from './components/NotificationTicker'
@@ -50,6 +50,8 @@ export default function App() {
   const [siteName, setSiteName] = useState('服务监控面板')
   const [tabSubtitle, setTabSubtitle] = useState('')
   const [subtitle, setSubtitle] = useState('')
+  const [showSubscribe, setShowSubscribe] = useState(false)
+  const [subTarget, setSubTarget] = useState<Monitor | null>(null)
 
   const fetchData = async () => {
     try {
@@ -191,6 +193,7 @@ export default function App() {
       render: (_: any, r: Monitor) => (
         <Space>
           <Button size="mini" onClick={() => { setDetailId(r.id); setShowDetail(true) }}>详情</Button>
+          <Button size="mini" onClick={() => { setSubTarget(r); setShowSubscribe(true) }}>订阅</Button>
         </Space>
       )
     },
@@ -199,16 +202,15 @@ export default function App() {
   return (
     <Layout className="min-h-screen bg-slate-50 dark:bg-slate-950 transition-colors duration-300">
       <Layout.Header className="bg-white dark:bg-slate-900 shadow-sm border-b border-slate-200 dark:border-slate-800 px-6 h-16 sticky top-0 z-50 transition-colors duration-300">
-        <div className="w-full max-w-screen-xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <img src="/img/favicon.svg" alt="logo" className="w-8 h-8 rounded-lg shadow-lg shadow-blue-500/30" />
+        <div className="w-full max-w-screen-xl mx-auto flex items-center justify-between h-full">
+          <div className="flex items-center gap-3 group cursor-default">
+            <img src="/img/favicon.svg" alt="logo" className="w-8 h-8 transition-all duration-500 group-hover:rotate-12 group-hover:scale-110" />
             <div className="flex flex-col">
-              <Typography.Title heading={5} className="!m-0 !text-slate-800 dark:!text-slate-100">{siteName}</Typography.Title>
-              {subtitle ? <Typography.Text className="text-slate-500 dark:text-slate-400 text-xs">{subtitle}</Typography.Text> : null}
+              <Typography.Title heading={5} className="!m-0 !text-slate-800 dark:!text-slate-100 animate-fade-in-up transition-colors duration-300 group-hover:text-blue-600 dark:group-hover:text-blue-400">{siteName}</Typography.Title>
+              {subtitle ? <Typography.Text className="text-slate-500 dark:text-slate-400 text-xs animate-fade-in-up delay-200 ml-8">{subtitle}</Typography.Text> : null}
             </div>
           </div>
           <Space size="medium">
-            <Button icon={<IconSync />} onClick={fetchData} loading={loading} type="secondary">刷新</Button>
             <Select style={{ width: 160 }} placeholder="分组筛选" value={groupFilter} onChange={setGroupFilter} allowClear triggerProps={{ autoAlignPopupWidth: false, autoAlignPopupMinWidth: true, position: 'bl' }}>
               <Select.Option value={'all' as any}>全部项目</Select.Option>
               {(groups || []).map(g => <Select.Option key={g.id} value={g.id}>{g.name}</Select.Option>)}
@@ -328,6 +330,7 @@ export default function App() {
       </Layout>
 
       {showDetail && detailId !== null && <DetailDrawer id={detailId} onClose={() => setShowDetail(false)} />}
+      {showSubscribe && subTarget && <SubscribeModal visible={showSubscribe} onClose={() => setShowSubscribe(false)} monitor={subTarget} />}
       {needSetup && <SetupWizard onDone={async () => { setNeedSetup(false); await fetchData() }} />}
       {showLogin && <LoginModal onClose={()=>setShowLogin(false)} />}
     </Layout>
@@ -378,6 +381,46 @@ function StatusBar({ monitorId }: { monitorId: number }) {
   return <div className="flex items-center justify-center">{blocks}</div>
 }
 
+function SubscribeModal({ visible, onClose, monitor }: { visible: boolean; onClose: () => void; monitor: Monitor }) {
+  const [form] = Form.useForm()
+  useEffect(() => {
+    if (visible) {
+      form.resetFields()
+      form.setFieldsValue({ email: '', events: ['offline','online','ssl_expiry'] })
+    }
+  }, [visible])
+  const submit = async () => {
+    const v = await form.validate()
+    try {
+      await fetch('/api/public/subscribe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ monitor_id: monitor.id, email: v.email, notify_events: v.events })
+      }).then(async (res)=> {
+        if (!res.ok) throw new Error(await res.text())
+      })
+      Message.success('验证邮件已发送，请查收并完成验证')
+      onClose()
+    } catch (e:any) {
+      Message.error(String(e?.message || e))
+    }
+  }
+  return (
+    <Modal title={`订阅 · ${monitor.name}`} visible={visible} onCancel={onClose} onOk={submit} okText="发送验证">
+      <Form form={form} layout="vertical">
+        <Form.Item label="邮箱" field="email" rules={[{ required: true }]}><Input placeholder="user@example.com" /></Form.Item>
+        <Form.Item label="通知类型" field="events" rules={[{ required: true }]}>
+          <Checkbox.Group options={[
+            { label: '离线', value: 'offline' },
+            { label: '恢复', value: 'online' },
+            { label: '证书到期', value: 'ssl_expiry' },
+          ]} />
+        </Form.Item>
+      </Form>
+      <div className="text-xs text-gray-500 mt-2">将向该邮箱发送验证邮件，验证通过后即可订阅。</div>
+    </Modal>
+  )
+}
 function MonitorForm({ visible, onClose, editing, groups, onOk }: { visible: boolean; onClose: () => void; editing: Monitor | null; groups: Group[]; onOk: () => void }) {
   const [form] = Form.useForm()
   useEffect(() => {

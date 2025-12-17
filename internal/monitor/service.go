@@ -389,6 +389,20 @@ func (s *Service) CheckMonitor(id int) error {
 				}
 				if contains(events, wantEvent) {
 					recips := toList(ifNullStr(toEmails, ""))
+					rows, _ := s.db.Query(`SELECT email, notify_events FROM monitor_subscriptions WHERE monitor_id=$1 AND verified=true`, m.ID)
+					for rows.Next() {
+						var em, ev string
+						if err := rows.Scan(&em, &ev); err == nil {
+							parts := strings.Split(ev, ",")
+							for i := range parts {
+								parts[i] = strings.TrimSpace(parts[i])
+							}
+							if contains(parts, wantEvent) && strings.TrimSpace(em) != "" {
+								recips = append(recips, em)
+							}
+						}
+					}
+					_ = rows.Close()
 					if len(recips) == 0 {
 						var to string
 						_ = s.db.QueryRow(`SELECT email FROM admin_users ORDER BY id LIMIT 1`).Scan(&to)
@@ -499,6 +513,20 @@ func (s *Service) checkSSL(m *model.Monitor) {
 				events := ifNullCSV(notifyEvents, []string{"online", "offline", "ssl_expiry"})
 				if contains(events, "ssl_expiry") {
 					recips := toList(ifNullStr(toEmails, ""))
+					rows, _ := s.db.Query(`SELECT email, notify_events FROM monitor_subscriptions WHERE monitor_id=$1 AND verified=true`, m.ID)
+					for rows.Next() {
+						var em, ev string
+						if err := rows.Scan(&em, &ev); err == nil {
+							parts := strings.Split(ev, ",")
+							for i := range parts {
+								parts[i] = strings.TrimSpace(parts[i])
+							}
+							if contains(parts, "ssl_expiry") && strings.TrimSpace(em) != "" {
+								recips = append(recips, em)
+							}
+						}
+					}
+					_ = rows.Close()
 					if len(recips) == 0 {
 						var to string
 						_ = s.db.QueryRow(`SELECT email FROM admin_users ORDER BY id LIMIT 1`).Scan(&to)

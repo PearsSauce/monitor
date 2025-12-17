@@ -136,6 +136,38 @@ export async function getNotifications(limit = 20) {
   return Array.isArray(data) ? data : []
 }
 
+export async function getSubscriptions(monitorId: number) {
+  return request(`/api/subscriptions?monitor_id=${monitorId}`)
+}
+
+export async function addSubscription(monitorId: number, email: string, events: string[]) {
+  await request('/api/subscriptions', { method: 'POST', body: JSON.stringify({ monitor_id: monitorId, email, notify_events: events }) })
+}
+
+export async function deleteSubscription(id: number) {
+  await request(`/api/subscriptions/${id}`, { method: 'DELETE' })
+}
+
+export async function publicSubscribe(monitorId: number, email: string, events: string[]) {
+  const res = await fetch('/api/public/subscribe', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ monitor_id: monitorId, email, notify_events: events })
+  })
+  if (!res.ok) {
+    const txt = await res.text()
+    throw new Error(txt || '订阅失败')
+  }
+}
+
+export async function getAllSubscriptions() {
+  return request('/api/subscriptions')
+}
+
+export async function deleteSubscriptionsForMonitor(monitorId: number) {
+  await request(`/api/monitors/${monitorId}/subscriptions`, { method: 'DELETE' })
+}
+
 
 export async function getLatestResult(id: number) {
   const res = await fetch(`/api/monitors/${id}/latest`)
