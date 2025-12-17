@@ -1,8 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { Button, Card, Divider, Drawer, Form, Grid, Input, InputNumber, Message, Modal, Select, Space, Switch, Table, Tag, Typography, Layout, Menu, Breadcrumb, Avatar, Dropdown } from '@arco-design/web-react'
-import { IconMoonFill, IconSun, IconSync, IconArrowLeft, IconDesktop, IconCheckCircle, IconCloseCircle, IconClockCircle, IconHome, IconNotification, IconUser } from '@arco-design/web-react/icon'
-import { createGroup, createMonitor, deleteGroup, getGroups, getHistory, getHistoryByDay, getMonitors, getSSL, getSetupState, postSetup, updateGroup, updateMonitor, getSettings, updateSettings, getNotifications, getLatestResult, getGlobalTrend, login, getToken } from './api'
-import { ResponseTrendChart, ResponseDistChart } from './components/ChartComponents'
+import { IconMoonFill, IconSun, IconSync, IconArrowLeft, IconDesktop, IconCheckCircle, IconCloseCircle, IconClockCircle, IconHome, IconNotification, IconUser, IconLaunch } from '@arco-design/web-react/icon'
+import { createGroup, createMonitor, deleteGroup, getGroups, getHistory, getHistoryByDay, getMonitors, getSSL, getSetupState, postSetup, updateGroup, updateMonitor, getSettings, updateSettings, getNotifications, getLatestResult, login, getToken } from './api'
+// 移除趋势与分布图组件
 import { NotificationTicker } from './components/NotificationTicker'
 import useTheme from './useTheme'
 
@@ -46,7 +46,6 @@ export default function App() {
   const [showLogin, setShowLogin] = useState(false)
   const [needSetup, setNeedSetup] = useState(false)
   const [notices, setNotices] = useState<NotificationItem[]>([])
-  const [trendData, setTrendData] = useState<{time:string, avg_resp:number}[]>([])
   const [view, setView] = useState<'dashboard' | 'notifications'>('dashboard')
   const [siteName, setSiteName] = useState('服务监控面板')
   const [tabSubtitle, setTabSubtitle] = useState('')
@@ -55,8 +54,6 @@ export default function App() {
   const fetchData = async () => {
     try {
       setLoading(true)
-      const trend = await getGlobalTrend().catch(()=>[])
-      setTrendData(trend)
       const data = await getMonitors()
       setList(Array.isArray(data) ? data : [])
       const gs = await getGroups()
@@ -129,34 +126,32 @@ export default function App() {
     return `${Math.round(sum / used.length)} ms`
   }, [latest])
 
-  const distData = useMemo(() => {
-    const counts = { fast: 0, medium: 0, slow: 0, error: 0 }
-    Object.values(latest).forEach(ms => {
-      if (ms < 0) return
-      if (ms < 100) counts.fast++
-      else if (ms < 500) counts.medium++
-      else if (ms < 1000) counts.slow++
-      else counts.error++
-    })
-    return [
-      { range: '<100ms', count: counts.fast },
-      { range: '100-500ms', count: counts.medium },
-      { range: '500-1000ms', count: counts.slow },
-      { range: '>1000ms', count: counts.error },
-    ].filter(x => x.count > 0)
-  }, [latest])
+  // 移除当前响应分布计算
 
   const columns = [
     { title: '名称', dataIndex: 'name' },
     {
       title: '状态',
+      align: 'center' as const,
       render: (_: any, r: Monitor) => (
         <Tag color={r.last_online ? 'green' : 'red'}>{r.last_online ? '在线' : '离线'}</Tag>
       )
     },
-    { title: 'URL', dataIndex: 'url' },
+    {
+      title: 'URL',
+      dataIndex: 'url',
+      render: (url: string) => (
+        <Space>
+          <span>{url}</span>
+          <a href={url} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:text-blue-600 flex items-center">
+            <IconLaunch />
+          </a>
+        </Space>
+      )
+    },
     {
       title: '分组',
+      align: 'center' as const,
       render: (_: any, r: Monitor) => {
         const g = groups.find(x => x.id === r.group_id)
         if (!g) return '-'
@@ -164,19 +159,23 @@ export default function App() {
       }
     },
     {
-      title: '最近响应',
-      render: (_: any, r: Monitor) => <span>{typeof latest[r.id] === 'number' ? `${latest[r.id]} ms` : '-'}</span>
-    },
-    {
-      title: '平均响应',
-      render: (_: any, r: Monitor) => <AvgResponse monitorId={r.id} />
+      title: <span className="inline-flex items-center justify-center"><IconClockCircle style={{ marginRight: 6 }} /> 响应</span>,
+      align: 'center' as const,
+      render: (_: any, r: Monitor) => (
+        <span className="inline-flex items-center justify-center">
+          <IconClockCircle style={{ marginRight: 6 }} />
+          {typeof latest[r.id] === 'number' ? `${latest[r.id]} ms` : '-'}
+        </span>
+      )
     },
     {
       title: '30天状态',
+      align: 'center' as const,
       render: (_: any, r: Monitor) => <StatusBar monitorId={r.id} />
     },
     {
       title: 'SSL剩余',
+      align: 'center' as const,
       render: (_: any, r: Monitor) => {
         const info = sslMap[r.id]
         if (!info) return '-'
@@ -199,109 +198,87 @@ export default function App() {
 
   return (
     <Layout className="min-h-screen bg-slate-50 dark:bg-slate-950 transition-colors duration-300">
-      <Layout.Header className="bg-white dark:bg-slate-900 shadow-sm border-b border-slate-200 dark:border-slate-800 px-6 h-16 flex items-center justify-between sticky top-0 z-50 transition-colors duration-300">
-        <div className="flex items-center gap-3">
-          <img src="/img/favicon.svg" alt="logo" className="w-8 h-8 rounded-lg shadow-lg shadow-blue-500/30" />
-          <div className="flex flex-col">
-            <Typography.Title heading={5} className="!m-0 !text-slate-800 dark:!text-slate-100">{siteName}</Typography.Title>
-            {subtitle ? <Typography.Text className="text-slate-500 dark:text-slate-400 text-xs">{subtitle}</Typography.Text> : null}
+      <Layout.Header className="bg-white dark:bg-slate-900 shadow-sm border-b border-slate-200 dark:border-slate-800 px-6 h-16 sticky top-0 z-50 transition-colors duration-300">
+        <div className="w-full max-w-screen-xl mx-auto flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <img src="/img/favicon.svg" alt="logo" className="w-8 h-8 rounded-lg shadow-lg shadow-blue-500/30" />
+            <div className="flex flex-col">
+              <Typography.Title heading={5} className="!m-0 !text-slate-800 dark:!text-slate-100">{siteName}</Typography.Title>
+              {subtitle ? <Typography.Text className="text-slate-500 dark:text-slate-400 text-xs">{subtitle}</Typography.Text> : null}
+            </div>
           </div>
+          <Space size="medium">
+            <Button icon={<IconSync />} onClick={fetchData} loading={loading} type="secondary">刷新</Button>
+            <Select style={{ width: 160 }} placeholder="分组筛选" value={groupFilter} onChange={setGroupFilter} allowClear triggerProps={{ autoAlignPopupWidth: false, autoAlignPopupMinWidth: true, position: 'bl' }}>
+              <Select.Option value={'all' as any}>全部项目</Select.Option>
+              {(groups || []).map(g => <Select.Option key={g.id} value={g.id}>{g.name}</Select.Option>)}
+            </Select>
+            <Switch checked={dark} onChange={setDark} checkedIcon={<IconMoonFill />} uncheckedIcon={<IconSun />} />
+            <Button type="primary" onClick={() => {
+              if (getToken()) window.location.href = '/admin'
+              else setShowLogin(true)
+            }} icon={<IconUser />}>管理员登录</Button>
+          </Space>
         </div>
-        <Space size="medium">
-          <Button icon={<IconSync />} onClick={fetchData} loading={loading} type="secondary">刷新</Button>
-          <Select style={{ width: 160 }} placeholder="分组筛选" value={groupFilter} onChange={setGroupFilter} allowClear triggerProps={{ autoAlignPopupWidth: false, autoAlignPopupMinWidth: true, position: 'bl' }}>
-            <Select.Option value={'all' as any}>全部项目</Select.Option>
-            {(groups || []).map(g => <Select.Option key={g.id} value={g.id}>{g.name}</Select.Option>)}
-          </Select>
-          <Switch checked={dark} onChange={setDark} checkedIcon={<IconMoonFill />} uncheckedIcon={<IconSun />} />
-          <Button type="primary" onClick={() => {
-            if (getToken()) window.location.href = '/admin'
-            else setShowLogin(true)
-          }} icon={<IconUser />}>管理员登录</Button>
-        </Space>
       </Layout.Header>
       
       <Layout className="px-6 py-4">
         {view === 'dashboard' ? (
           <Layout.Content>
+            <div className="w-full max-w-screen-xl mx-auto">
             <div className="mb-4">
                <NotificationTicker notices={notices} onClick={() => setView('notifications')} isDark={dark} />
             </div>
             
             <Grid.Row gutter={16}>
               <Grid.Col span={6}>
-                <Card className="hover:shadow-md transition-shadow duration-300 bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800">
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <Typography.Text className="text-slate-500 dark:text-slate-400">总站点数</Typography.Text>
-                      <div className="text-3xl mt-2 font-bold text-slate-800 dark:text-slate-100">{totalCount}</div>
-                    </div>
-                    <div className="p-3 bg-blue-50 dark:bg-opacity-20 dark:bg-blue-500 rounded-full">
-                      <IconDesktop className="text-blue-600 dark:text-blue-300 text-xl" />
-                    </div>
+                <Card className="h-32 relative overflow-hidden group rounded-xl shadow-none bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 transition-all duration-300 hover:-translate-y-1 hover:shadow-lg dark:hover:shadow-slate-800/50">
+                  <div className="relative z-10">
+                    <Typography.Text className="text-slate-500 dark:text-slate-400 font-medium">总站点数</Typography.Text>
+                    <div className="text-4xl mt-2 font-bold text-slate-800 dark:text-slate-100">{totalCount}</div>
                   </div>
+                  <IconDesktop className="absolute -right-4 -bottom-4 text-8xl text-blue-500 dark:text-blue-400 opacity-10 transform rotate-12 transition-all duration-500 group-hover:scale-110 group-hover:rotate-0 group-hover:opacity-20" />
                 </Card>
               </Grid.Col>
               <Grid.Col span={6}>
-                <Card className="hover:shadow-md transition-shadow duration-300 bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800">
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <Typography.Text className="text-slate-500 dark:text-slate-400">在线站点</Typography.Text>
-                      <div className="text-3xl mt-2 font-bold text-green-600 dark:text-green-400">{onlineCount}</div>
-                    </div>
-                    <div className="p-3 bg-green-50 dark:bg-opacity-20 dark:bg-green-500 rounded-full">
-                      <IconCheckCircle className="text-green-600 dark:text-green-300 text-xl" />
-                    </div>
+                <Card className="h-32 relative overflow-hidden group rounded-xl shadow-none bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 transition-all duration-300 hover:-translate-y-1 hover:shadow-lg dark:hover:shadow-slate-800/50">
+                  <div className="relative z-10">
+                    <Typography.Text className="text-slate-500 dark:text-slate-400 font-medium">在线站点</Typography.Text>
+                    <div className="text-4xl mt-2 font-bold text-green-600 dark:text-green-400">{onlineCount}</div>
                   </div>
+                  <IconCheckCircle className="absolute -right-4 -bottom-4 text-8xl text-green-500 dark:text-green-400 opacity-10 transform rotate-12 transition-all duration-500 group-hover:scale-110 group-hover:rotate-0 group-hover:opacity-20" />
                 </Card>
               </Grid.Col>
               <Grid.Col span={6}>
-                <Card className="hover:shadow-md transition-shadow duration-300 bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800">
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <Typography.Text className="text-slate-500 dark:text-slate-400">离线站点</Typography.Text>
-                      <div className="text-3xl mt-2 font-bold text-red-600 dark:text-red-400">{offlineCount}</div>
-                    </div>
-                    <div className="p-3 bg-red-50 dark:bg-opacity-20 dark:bg-red-500 rounded-full">
-                      <IconCloseCircle className="text-red-600 dark:text-red-300 text-xl" />
-                    </div>
+                <Card className="h-32 relative overflow-hidden group rounded-xl shadow-none bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 transition-all duration-300 hover:-translate-y-1 hover:shadow-lg dark:hover:shadow-slate-800/50">
+                  <div className="relative z-10">
+                    <Typography.Text className="text-slate-500 dark:text-slate-400 font-medium">离线站点</Typography.Text>
+                    <div className="text-4xl mt-2 font-bold text-red-600 dark:text-red-400">{offlineCount}</div>
                   </div>
+                  <IconCloseCircle className="absolute -right-4 -bottom-4 text-8xl text-red-500 dark:text-red-400 opacity-10 transform rotate-12 transition-all duration-500 group-hover:scale-110 group-hover:rotate-0 group-hover:opacity-20" />
                 </Card>
               </Grid.Col>
               <Grid.Col span={6}>
-                <Card className="hover:shadow-md transition-shadow duration-300 bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800">
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <Typography.Text className="text-slate-500 dark:text-slate-400">平均响应</Typography.Text>
-                      <div className="text-3xl mt-2 font-bold text-blue-600 dark:text-blue-400">{avgRespAll}</div>
-                    </div>
-                    <div className="p-3 bg-indigo-50 dark:bg-opacity-20 dark:bg-indigo-500 rounded-full">
-                      <IconClockCircle className="text-indigo-600 dark:text-indigo-300 text-xl" />
-                    </div>
+                <Card className="h-32 relative overflow-hidden group rounded-xl shadow-none bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 transition-all duration-300 hover:-translate-y-1 hover:shadow-lg dark:hover:shadow-slate-800/50">
+                  <div className="relative z-10">
+                    <Typography.Text className="text-slate-500 dark:text-slate-400 font-medium">平均响应</Typography.Text>
+                    <div className="text-4xl mt-2 font-bold text-indigo-600 dark:text-indigo-400">{avgRespAll}</div>
                   </div>
+                  <IconClockCircle className="absolute -right-4 -bottom-4 text-8xl text-indigo-500 dark:text-indigo-400 opacity-10 transform rotate-12 transition-all duration-500 group-hover:scale-110 group-hover:rotate-0 group-hover:opacity-20" />
                 </Card>
               </Grid.Col>
             </Grid.Row>
             
-            <Grid.Row gutter={16} className="mt-4">
-              <Grid.Col span={16}>
-                <Card title="24小时响应趋势" className="h-full hover:shadow-md transition-shadow bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800">
-                  <ResponseTrendChart data={trendData} isDark={dark} />
-                </Card>
-              </Grid.Col>
-              <Grid.Col span={8}>
-                <Card title="当前响应分布" className="h-full hover:shadow-md transition-shadow bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800">
-                  <ResponseDistChart data={distData} isDark={dark} />
-                </Card>
-              </Grid.Col>
-            </Grid.Row>
+            {/* 已移除 24小时响应趋势 与 当前响应分布 */}
     
-            <Card className="mt-4 hover:shadow-md transition-shadow bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800" title="监控列表">
+            <Card className="mt-4 rounded-xl shadow-none bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800" title="监控列表">
               <Table rowKey="id" columns={columns as any} data={filtered} pagination={false} border={false} />
             </Card>
+            </div>
           </Layout.Content>
         ) : (
           <Layout.Content>
+            <div className="w-full max-w-screen-xl mx-auto">
             <Breadcrumb className="mb-4">
               <Breadcrumb.Item onClick={() => setView('dashboard')} className="cursor-pointer"><IconHome /> 首页</Breadcrumb.Item>
               <Breadcrumb.Item>异常通知历史</Breadcrumb.Item>
@@ -342,6 +319,7 @@ export default function App() {
                 ] as any} 
               />
             </Card>
+            </div>
           </Layout.Content>
         )}
         <Layout.Footer className="text-center text-gray-400 py-8">
@@ -397,7 +375,7 @@ function StatusBar({ monitorId }: { monitorId: number }) {
       return <div title={`${i.day} 在线率 ${Math.round(ratio*100)}%`} key={idx} className={`h-3 w-3 mr-1 rounded ${color}`}></div>
     })
   }, [items])
-  return <div className="flex items-center">{blocks}</div>
+  return <div className="flex items-center justify-center">{blocks}</div>
 }
 
 function MonitorForm({ visible, onClose, editing, groups, onOk }: { visible: boolean; onClose: () => void; editing: Monitor | null; groups: Group[]; onOk: () => void }) {

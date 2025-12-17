@@ -58,19 +58,34 @@ export async function login(password: string) {
   setToken(data.token)
 }
 
+async function request(url: string, options: RequestInit = {}) {
+  const headers = { 'Content-Type': 'application/json', ...authHeader(), ...(options.headers || {}) }
+  const res = await fetch(url, { ...options, headers })
+  if (res.status === 401) {
+    setToken('')
+    throw new Error('登录已过期，请刷新页面重新登录')
+  }
+  if (!res.ok) {
+    const txt = await res.text()
+    throw new Error(txt || res.statusText)
+  }
+  const contentType = res.headers.get('content-type')
+  if (contentType && contentType.includes('application/json')) {
+    return res.json()
+  }
+  return res.text()
+}
+
 export async function createGroup(payload: any) {
-  const res = await fetch('/api/groups', { method: 'POST', headers: { 'Content-Type': 'application/json', ...authHeader() }, body: JSON.stringify(payload) })
-  if (!res.ok) throw new Error('创建分组失败')
+  await request('/api/groups', { method: 'POST', body: JSON.stringify(payload) })
 }
 
 export async function updateGroup(id: number, payload: any) {
-  const res = await fetch(`/api/groups/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json', ...authHeader() }, body: JSON.stringify(payload) })
-  if (!res.ok) throw new Error('更新分组失败')
+  await request(`/api/groups/${id}`, { method: 'PUT', body: JSON.stringify(payload) })
 }
 
 export async function deleteGroup(id: number) {
-  const res = await fetch(`/api/groups/${id}`, { method: 'DELETE', headers: authHeader() })
-  if (!res.ok) throw new Error('删除分组失败')
+  await request(`/api/groups/${id}`, { method: 'DELETE' })
 }
 
 export async function getSSL(id: number) {
@@ -81,18 +96,15 @@ export async function getSSL(id: number) {
 }
 
 export async function createMonitor(payload: any) {
-  const res = await fetch('/api/monitors', { method: 'POST', headers: { 'Content-Type': 'application/json', ...authHeader() }, body: JSON.stringify(payload) })
-  if (!res.ok) throw new Error('创建失败')
+  await request('/api/monitors', { method: 'POST', body: JSON.stringify(payload) })
 }
 
 export async function updateMonitor(id: number, payload: any) {
-  const res = await fetch(`/api/monitors/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json', ...authHeader() }, body: JSON.stringify(payload) })
-  if (!res.ok) throw new Error('更新失败')
+  await request(`/api/monitors/${id}`, { method: 'PUT', body: JSON.stringify(payload) })
 }
 
 export async function deleteMonitor(id: number) {
-  const res = await fetch(`/api/monitors/${id}`, { method: 'DELETE', headers: authHeader() })
-  if (!res.ok) throw new Error('删除失败')
+  await request(`/api/monitors/${id}`, { method: 'DELETE' })
 }
 
 export async function getSetupState() {
@@ -124,12 +136,6 @@ export async function getNotifications(limit = 20) {
   return Array.isArray(data) ? data : []
 }
 
-export async function getGlobalTrend() {
-  const res = await fetch('/api/stats/trend')
-  if (!res.ok) throw new Error('网络错误')
-  const data = await res.json()
-  return Array.isArray(data) ? data : []
-}
 
 export async function getLatestResult(id: number) {
   const res = await fetch(`/api/monitors/${id}/latest`)

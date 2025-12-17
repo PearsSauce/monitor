@@ -151,21 +151,24 @@ export default function Admin() {
   
   return (
     <Layout className="min-h-screen bg-slate-50 dark:bg-slate-950 transition-colors duration-300">
-      <Layout.Header className="bg-white dark:bg-slate-900 shadow-sm border-b border-slate-200 dark:border-slate-800 px-6 h-16 flex items-center justify-between sticky top-0 z-50 transition-colors duration-300">
-        <div className="flex items-center gap-3">
-          <img src="/img/favicon.svg" alt="logo" className="w-8 h-8 rounded-lg shadow-lg shadow-blue-500/30" />
-          <div className="flex flex-col">
-            <Typography.Title heading={5} style={{ margin: 0 }} className="text-slate-800 dark:text-slate-100">{siteName}</Typography.Title>
-            {subtitle ? <Typography.Text className="text-slate-500 dark:text-slate-400 text-xs">{subtitle}</Typography.Text> : null}
+      <Layout.Header className="bg-white dark:bg-slate-900 shadow-sm border-b border-slate-200 dark:border-slate-800 px-6 h-16 sticky top-0 z-50 transition-colors duration-300">
+        <div className="w-full max-w-screen-xl mx-auto flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <img src="/img/favicon.svg" alt="logo" className="w-8 h-8 rounded-lg shadow-lg shadow-blue-500/30" />
+            <div className="flex flex-col">
+              <Typography.Title heading={5} style={{ margin: 0 }} className="text-slate-800 dark:text-slate-100">{siteName}</Typography.Title>
+              {subtitle ? <Typography.Text className="text-slate-500 dark:text-slate-400 text-xs">{subtitle}</Typography.Text> : null}
+            </div>
           </div>
+          <Space>
+            <Switch checked={dark} onChange={setDark} checkedIcon={<IconMoonFill />} uncheckedIcon={<IconSun />} />
+            <Button type="text" icon={<IconHome />} onClick={goDashboard} className="text-slate-600 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400">返回首页</Button>
+            <Button type="text" status="danger" icon={<IconPoweroff />} onClick={logout}>退出登录</Button>
+          </Space>
         </div>
-        <Space>
-          <Switch checked={dark} onChange={setDark} checkedIcon={<IconMoonFill />} uncheckedIcon={<IconSun />} />
-          <Button type="text" icon={<IconHome />} onClick={goDashboard} className="text-slate-600 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400">返回首页</Button>
-          <Button type="text" status="danger" icon={<IconPoweroff />} onClick={logout}>退出登录</Button>
-        </Space>
       </Layout.Header>
       <Layout.Content className="px-6 py-4">
+        <div className="w-full max-w-screen-xl mx-auto">
         <Breadcrumb className="mb-4">
           <Breadcrumb.Item>首页</Breadcrumb.Item>
           <Breadcrumb.Item>系统管理</Breadcrumb.Item>
@@ -258,6 +261,7 @@ export default function Admin() {
             </Tabs.TabPane>
           </Tabs>
         </Card>
+        </div>
       </Layout.Content>
 
       <MonitorForm visible={showForm} onClose={()=>setShowForm(false)} editing={editing} groups={groups} onOk={()=>{ setShowForm(false); fetchData() }} />
@@ -299,10 +303,22 @@ function MonitorForm({ visible, onClose, editing, groups, onOk }: { visible: boo
   }, [editing])
   const submit = async () => {
     const v = await form.validate()
-    if (editing) await updateMonitor(editing.id, v)
-    else await createMonitor(v)
-    Message.success('已保存')
-    onOk()
+    if (v.headers_json) {
+      try {
+        JSON.parse(v.headers_json)
+      } catch (e) {
+        Message.error('请求头必须是合法的 JSON 格式')
+        return
+      }
+    }
+    try {
+      if (editing) await updateMonitor(editing.id, v)
+      else await createMonitor(v)
+      Message.success('已保存')
+      onOk()
+    } catch (e: any) {
+      Message.error(e.message)
+    }
   }
   return (
     <Modal title={editing ? '编辑监控' : '新建监控'} visible={visible} onCancel={onClose} onOk={submit} okText="保存">

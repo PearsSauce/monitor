@@ -103,7 +103,6 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("/api/setup", s.handleSetup)
 	s.mux.HandleFunc("/api/health", s.handleHealth)
 	s.mux.HandleFunc("/api/settings", s.handleSettings)
-	s.mux.HandleFunc("/api/stats/trend", s.handleStatsTrend)
 	s.mux.HandleFunc("/api/admin/verify", s.handleAdminVerify)
 	s.mux.HandleFunc("/api/login", s.handleLogin)
 }
@@ -695,38 +694,6 @@ func (s *Server) handleSettings(w http.ResponseWriter, r *http.Request) {
 	default:
 		w.WriteHeader(405)
 	}
-}
-
-func (s *Server) handleStatsTrend(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		w.WriteHeader(405)
-		return
-	}
-	rows, err := s.s.DB().Query(`SELECT date_trunc('hour', checked_at) as bucket,
-		COALESCE(AVG(response_ms), 0) as avg_resp
-		FROM monitor_results
-		WHERE checked_at >= NOW() - INTERVAL '24 hours' AND online = true
-		GROUP BY bucket
-		ORDER BY bucket ASC`)
-	if err != nil {
-		http.Error(w, err.Error(), 500)
-		return
-	}
-	defer rows.Close()
-	type dataPoint struct {
-		Time    string `json:"time"`
-		AvgResp int    `json:"avg_resp"`
-	}
-	var data = []dataPoint{}
-	for rows.Next() {
-		var t time.Time
-		var avg float64
-		if err := rows.Scan(&t, &avg); err != nil {
-			continue
-		}
-		data = append(data, dataPoint{Time: t.Format(time.RFC3339), AvgResp: int(avg)})
-	}
-	writeJSON(w, data)
 }
 
 func (s *Server) handleAdminVerify(w http.ResponseWriter, r *http.Request) {
