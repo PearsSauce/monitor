@@ -48,6 +48,9 @@ export default function App() {
   const [notices, setNotices] = useState<NotificationItem[]>([])
   const [trendData, setTrendData] = useState<{time:string, avg_resp:number}[]>([])
   const [view, setView] = useState<'dashboard' | 'notifications'>('dashboard')
+  const [siteName, setSiteName] = useState('服务监控面板')
+  const [tabSubtitle, setTabSubtitle] = useState('')
+  const [subtitle, setSubtitle] = useState('')
 
   const fetchData = async () => {
     try {
@@ -78,6 +81,14 @@ export default function App() {
 
   useEffect(() => {
     getSetupState().then(s=> { setNeedSetup(!s.installed); if (s.installed) fetchData() }).catch(()=>fetchData())
+    getSettings().then(s => {
+      const name = s.site_name || '服务监控面板'
+      setSiteName(name)
+      setSubtitle(s.subtitle || '')
+      setTabSubtitle(s.tab_subtitle || '')
+      const t = tabSubtitle ? `${name} - ${s.tab_subtitle}` : name
+      if (typeof document !== 'undefined') document.title = t
+    }).catch(()=>{})
   }, [])
   useEffect(() => {
     const es = new EventSource('/api/events')
@@ -190,10 +201,11 @@ export default function App() {
     <Layout className="min-h-screen bg-slate-50 dark:bg-slate-950 transition-colors duration-300">
       <Layout.Header className="bg-white dark:bg-slate-900 shadow-sm border-b border-slate-200 dark:border-slate-800 px-6 h-16 flex items-center justify-between sticky top-0 z-50 transition-colors duration-300">
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center shadow-lg shadow-blue-500/30">
-            <IconDesktop className="text-white text-lg" />
+          <img src="/img/favicon.svg" alt="logo" className="w-8 h-8 rounded-lg shadow-lg shadow-blue-500/30" />
+          <div className="flex flex-col">
+            <Typography.Title heading={5} className="!m-0 !text-slate-800 dark:!text-slate-100">{siteName}</Typography.Title>
+            {subtitle ? <Typography.Text className="text-slate-500 dark:text-slate-400 text-xs">{subtitle}</Typography.Text> : null}
           </div>
-          <Typography.Title heading={5} className="!m-0 !text-slate-800 dark:!text-slate-100">服务监控面板</Typography.Title>
         </div>
         <Space size="medium">
           <Button icon={<IconSync />} onClick={fetchData} loading={loading} type="secondary">刷新</Button>
@@ -347,7 +359,8 @@ export default function App() {
 function AvgResponse({ monitorId }: { monitorId: number }) {
   const [items, setItems] = useState<HistoryItem[]>([])
   useEffect(() => {
-    getHistory(monitorId, 30).then(setItems).catch(() => {})
+    const days = typeof localStorage !== 'undefined' ? Number(localStorage.getItem('HISTORY_DAYS') || '30') : 30
+    getHistory(monitorId, days).then(setItems).catch(() => {})
   }, [monitorId])
   useEffect(() => {
     const es = new EventSource('/api/events')
@@ -458,8 +471,14 @@ function DetailDrawer({ id, onClose }: { id: number; onClose: () => void }) {
   const [items, setItems] = useState<HistoryItem[]>([])
   const [days, setDays] = useState<DayAgg[]>([])
   const [ssl, setSsl] = useState<SSLInfo>(null)
-  useEffect(() => { getHistory(id, 30).then(setItems).catch(()=>{}) }, [id])
-  useEffect(() => { getHistoryByDay(id, 30).then(setDays).catch(()=>{}) }, [id])
+  useEffect(() => { 
+    const d = typeof localStorage !== 'undefined' ? Number(localStorage.getItem('HISTORY_DAYS') || '30') : 30
+    getHistory(id, d).then(setItems).catch(()=>{}) 
+  }, [id])
+  useEffect(() => { 
+    const d = typeof localStorage !== 'undefined' ? Number(localStorage.getItem('HISTORY_DAYS') || '30') : 30
+    getHistoryByDay(id, d).then(setDays).catch(()=>{}) 
+  }, [id])
   useEffect(() => { getSSL(id).then(setSsl).catch(()=>{}) }, [id])
   const buckets = useMemo(() => {
     const edges = [100,200,300,400,500,750,1000,1500,2000,3000]
@@ -604,4 +623,3 @@ function GroupManager({ visible, onClose, groups, onOk }: { visible: boolean; on
     </Modal>
   )
 }
-

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { Button, Form, Grid, InputNumber, Input, Message, Space, Typography, Card, Divider, Table, Tag, Modal, Select, Layout, Breadcrumb, Tabs, Switch } from '@arco-design/web-react'
+import { Button, Form, Grid, InputNumber, Input, Message, Space, Typography, Card, Divider, Table, Tag, Modal, Select, Layout, Breadcrumb, Tabs, Switch, Checkbox } from '@arco-design/web-react'
 import { IconHome, IconSettings, IconPoweroff, IconPlus, IconDesktop, IconDelete, IconEdit, IconMoonFill, IconSun } from '@arco-design/web-react/icon'
 import { getSettings, updateSettings, getToken, setToken, getMonitors, getGroups, createMonitor, updateMonitor, deleteMonitor, createGroup, updateGroup, deleteGroup } from './api'
 import Login from './Login'
@@ -8,12 +8,19 @@ import useTheme from './useTheme'
 export default function Admin() {
   const { dark, setDark } = useTheme()
   const [form] = Form.useForm()
+  const [websiteForm] = Form.useForm()
+  const [dataForm] = Form.useForm()
+  const [notifyForm] = Form.useForm()
+  const [siteName, setSiteName] = useState('服务监控系统')
+  const [subtitle, setSubtitle] = useState('')
   const [list, setList] = useState<Monitor[]>([])
   const [groups, setGroups] = useState<Group[]>([])
   const [showForm, setShowForm] = useState(false)
   const [editing, setEditing] = useState<Monitor | null>(null)
   const [showGroups, setShowGroups] = useState(false)
   const [token, setTokenState] = useState(getToken())
+  const [testType, setTestType] = useState<'online' | 'offline' | 'ssl_expiry'>('offline')
+  const [testMonitor, setTestMonitor] = useState<number | null>(null)
 
   useEffect(() => {
     if (!token) return
@@ -22,6 +29,32 @@ export default function Admin() {
         retention_days: s.retention_days,
         flap_threshold: s.flap_threshold,
         check_interval_seconds: s.check_interval_seconds
+      })
+      websiteForm.setFieldsValue({
+        site_name: s.site_name,
+        subtitle: s.subtitle,
+        tab_subtitle: s.tab_subtitle
+      })
+      setSiteName(s.site_name || '服务监控系统')
+      setSubtitle(s.subtitle || '')
+      const title = s.tab_subtitle ? `${s.site_name || '服务监控系统'} - ${s.tab_subtitle}` : (s.site_name || '服务监控系统')
+      if (typeof document !== 'undefined') document.title = title
+      dataForm.setFieldsValue({
+        history_days_frontend: s.history_days_frontend ?? (typeof localStorage !== 'undefined' ? Number(localStorage.getItem('HISTORY_DAYS') || '30') : 30),
+        retention_days: s.retention_days,
+        check_interval_seconds: s.check_interval_seconds,
+        debounce_seconds: s.debounce_seconds ?? 0,
+        flap_threshold: s.flap_threshold
+      })
+      notifyForm.setFieldsValue({
+        enable_notifications: s.enable_notifications ?? true,
+        notify_events: s.notify_events ?? ['online', 'offline', 'ssl_expiry'],
+        smtp_server: s.smtp_server,
+        smtp_port: s.smtp_port,
+        smtp_user: s.smtp_user,
+        smtp_password: s.smtp_password,
+        from_email: s.from_email,
+        to_emails: s.to_emails
       })
     }).catch(()=>{})
     fetchData()
@@ -37,10 +70,59 @@ export default function Admin() {
     setList(Array.isArray(ms) ? ms : [])
     setGroups(Array.isArray(gs) ? gs : [])
   }
-  const save = async () => {
-    const v = await form.validate()
-    await updateSettings({ retention_days: v.retention_days, flap_threshold: v.flap_threshold, check_interval_seconds: v.check_interval_seconds })
-    Message.success('系统设置已保存')
+  const saveWebsite = async () => {
+    const v = await websiteForm.validate()
+    await updateSettings({ site_name: v.site_name, subtitle: v.subtitle, tab_subtitle: v.tab_subtitle })
+    Message.success('网站设置已保存')
+  }
+  const saveData = async () => {
+    const v = await dataForm.validate()
+    await updateSettings({
+      retention_days: v.retention_days,
+      check_interval_seconds: v.check_interval_seconds,
+      debounce_seconds: v.debounce_seconds,
+      flap_threshold: v.flap_threshold
+    })
+    try {
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem('HISTORY_DAYS', String(v.history_days_frontend || 30))
+      }
+    } catch {}
+    Message.success('数据设置已保存')
+  }
+  const saveNotify = async () => {
+    const v = await notifyForm.validate()
+    await updateSettings({
+      enable_notifications: v.enable_notifications,
+      notify_events: v.notify_events,
+      smtp_server: v.smtp_server,
+      smtp_port: v.smtp_port,
+      smtp_user: v.smtp_user,
+      smtp_password: v.smtp_password,
+      from_email: v.from_email,
+      to_emails: v.to_emails
+    })
+    Message.success('通知设置已保存')
+  }
+  const sendTestNotify = async () => {
+    try {
+      if (!testMonitor) {
+        Message.warning('请选择站点')
+        return
+      }
+      const res = await fetch('/api/notifications/test', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(getToken() ? { 'Authorization': `Bearer ${getToken()}` } : {})
+        },
+        body: JSON.stringify({ type: testType, monitor_id: testMonitor })
+      })
+      if (!res.ok) throw new Error('测试通知发送失败')
+      Message.success('测试通知已发送')
+    } catch (e:any) {
+      Message.error(String(e?.message || e))
+    }
   }
   const goDashboard = () => { window.location.href = '/' }
   const logout = () => {
@@ -70,8 +152,12 @@ export default function Admin() {
   return (
     <Layout className="min-h-screen bg-slate-50 dark:bg-slate-950 transition-colors duration-300">
       <Layout.Header className="bg-white dark:bg-slate-900 shadow-sm border-b border-slate-200 dark:border-slate-800 px-6 h-16 flex items-center justify-between sticky top-0 z-50 transition-colors duration-300">
-        <div className="flex items-center">
-          <Typography.Title heading={5} style={{ margin: 0 }} className="text-slate-800 dark:text-slate-100">系统管理</Typography.Title>
+        <div className="flex items-center gap-3">
+          <img src="/img/favicon.svg" alt="logo" className="w-8 h-8 rounded-lg shadow-lg shadow-blue-500/30" />
+          <div className="flex flex-col">
+            <Typography.Title heading={5} style={{ margin: 0 }} className="text-slate-800 dark:text-slate-100">{siteName}</Typography.Title>
+            {subtitle ? <Typography.Text className="text-slate-500 dark:text-slate-400 text-xs">{subtitle}</Typography.Text> : null}
+          </div>
         </div>
         <Space>
           <Switch checked={dark} onChange={setDark} checkedIcon={<IconMoonFill />} uncheckedIcon={<IconSun />} />
@@ -84,31 +170,90 @@ export default function Admin() {
           <Breadcrumb.Item>首页</Breadcrumb.Item>
           <Breadcrumb.Item>系统管理</Breadcrumb.Item>
         </Breadcrumb>
-        
         <Card className="shadow-sm rounded-lg bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800">
-          <Tabs defaultActiveTab="monitors">
-            <Tabs.TabPane key="monitors" title={<span><IconDesktop /> 监控列表</span>}>
+          <Tabs defaultActiveTab="sites">
+            <Tabs.TabPane key="sites" title={<span><IconDesktop /> 站点管理</span>}>
               <div className="mb-4">
-                <Space>
+                <Typography.Title heading={6}>站点列表</Typography.Title>
+                <Space className="mb-3">
                   <Button type="primary" icon={<IconPlus />} onClick={openCreate}>新建监控</Button>
-                  <Button icon={<IconSettings />} onClick={openGroups}>管理分组</Button>
+                  <Button icon={<IconSettings />} onClick={openGroups}>分类管理</Button>
                 </Space>
+                <Table rowKey="id" columns={columns as any} data={list} pagination={false} />
               </div>
-              <Table rowKey="id" columns={columns as any} data={list} pagination={false} />
             </Tabs.TabPane>
-            <Tabs.TabPane key="settings" title={<span><IconSettings /> 系统设置</span>}>
+            <Tabs.TabPane key="website" title={<span><IconSettings /> 网站设置</span>}>
               <div className="max-w-3xl">
-                <Typography.Title heading={6} className="mb-4">全局配置</Typography.Title>
-                <Form form={form} layout="vertical">
+                <Typography.Title heading={6} className="mb-4">基础信息</Typography.Title>
+                <Form form={websiteForm} layout="vertical">
+                  <Form.Item label="网站名称" field="site_name" rules={[{ required: true }]}><Input placeholder="例如：服务监控系统" /></Form.Item>
+                  <Form.Item label="副标题" field="subtitle"><Input placeholder="例如：实时站点状态与响应监控" /></Form.Item>
+                  <Form.Item label="标签页副标题" field="tab_subtitle"><Input placeholder="例如：Monitor" /></Form.Item>
+                </Form>
+                <Divider />
+                <Button type="primary" onClick={saveWebsite}>保存网站设置</Button>
+              </div>
+            </Tabs.TabPane>
+            <Tabs.TabPane key="data" title={<span><IconSettings /> 数据设置</span>}>
+              <div className="max-w-3xl">
+                <Typography.Title heading={6} className="mb-4">数据与检测</Typography.Title>
+                <Form form={dataForm} layout="vertical">
                   <Grid.Row gutter={24}>
-                    <Grid.Col span={8}><Form.Item label="数据保留天数" field="retention_days" rules={[{ required: true }]}><InputNumber min={1} /></Form.Item></Grid.Col>
-                    <Grid.Col span={8}><Form.Item label="震荡次数阈值" field="flap_threshold" rules={[{ required: true }]}><InputNumber min={1} /></Form.Item></Grid.Col>
-                    <Grid.Col span={8}><Form.Item label="默认检查间隔(秒)" field="check_interval_seconds" rules={[{ required: true }]}><InputNumber min={10} /></Form.Item></Grid.Col>
+                    <Grid.Col span={12}><Form.Item label="历史数据时间范围(天)" field="history_days_frontend" rules={[{ required: true }]}><InputNumber min={1} /></Form.Item></Grid.Col>
+                    <Grid.Col span={12}><Form.Item label="数据保留天数(后端)" field="retention_days" rules={[{ required: true }]}><InputNumber min={1} /></Form.Item></Grid.Col>
+                  </Grid.Row>
+                  <Grid.Row gutter={24}>
+                    <Grid.Col span={12}><Form.Item label="网站检测间隔(秒)" field="check_interval_seconds" rules={[{ required: true }]}><InputNumber min={10} /></Form.Item></Grid.Col>
+                    <Grid.Col span={12}><Form.Item label="防抖时间(秒)" field="debounce_seconds" rules={[{ required: true }]}><InputNumber min={0} /></Form.Item></Grid.Col>
+                  </Grid.Row>
+                  <Form.Item label="震荡次数阈值" field="flap_threshold" rules={[{ required: true }]}><InputNumber min={1} /></Form.Item>
+                </Form>
+                <Divider />
+                <Button type="primary" onClick={saveData}>保存数据设置</Button>
+                <div className="text-xs text-gray-500 mt-2">说明：历史数据时间范围仅影响前端详情展示；数据保留天数用于后端实际清理；防抖时间用于避免短暂波动导致误报。</div>
+              </div>
+            </Tabs.TabPane>
+            <Tabs.TabPane key="notify" title={<span><IconSettings /> 通知设置</span>}>
+              <div className="max-w-3xl">
+                <Typography.Title heading={6} className="mb-4">通知配置</Typography.Title>
+                <Form form={notifyForm} layout="vertical">
+                  <Form.Item label="开启通知" field="enable_notifications" triggerPropName="checked"><Switch /></Form.Item>
+                  <Form.Item label="通知事件" field="notify_events">
+                    <Checkbox.Group options={[
+                      { label: '在线', value: 'online' },
+                      { label: '离线', value: 'offline' },
+                      { label: '证书到期', value: 'ssl_expiry' }
+                    ]} />
+                  </Form.Item>
+                  <Typography.Title heading={6} className="mt-2 mb-2">邮件通知</Typography.Title>
+                  <Grid.Row gutter={24}>
+                    <Grid.Col span={12}><Form.Item label="SMTP服务器" field="smtp_server"><Input placeholder="smtp.example.com" /></Form.Item></Grid.Col>
+                    <Grid.Col span={6}><Form.Item label="端口" field="smtp_port"><InputNumber min={1} /></Form.Item></Grid.Col>
+                    <Grid.Col span={6}><Form.Item label="发件邮箱" field="from_email"><Input placeholder="noreply@example.com" /></Form.Item></Grid.Col>
+                  </Grid.Row>
+                  <Grid.Row gutter={24}>
+                    <Grid.Col span={8}><Form.Item label="用户名" field="smtp_user"><Input /></Form.Item></Grid.Col>
+                    <Grid.Col span={8}><Form.Item label="密码" field="smtp_password"><Input.Password /></Form.Item></Grid.Col>
+                    <Grid.Col span={8}><Form.Item label="收件人邮箱(逗号分隔)" field="to_emails"><Input placeholder="a@example.com,b@example.com" /></Form.Item></Grid.Col>
                   </Grid.Row>
                 </Form>
                 <Divider />
-                <Button type="primary" onClick={save}>保存设置</Button>
-                <div className="text-xs text-gray-500 mt-2">说明：未在监控表单中设置检查间隔时，将使用此默认值；若监控表单填写了检查间隔，则以监控表单为准。</div>
+                <Space>
+                  <Button type="primary" onClick={saveNotify}>保存通知设置</Button>
+                </Space>
+                <Divider />
+                <Typography.Title heading={6}>测试通知</Typography.Title>
+                <Space align="center">
+                  <Select style={{ width: 160 }} value={testType} onChange={setTestType}>
+                    <Select.Option value="online">在线</Select.Option>
+                    <Select.Option value="offline">离线</Select.Option>
+                    <Select.Option value="ssl_expiry">证书到期</Select.Option>
+                  </Select>
+                  <Select style={{ width: 240 }} placeholder="选择站点" value={testMonitor as any} onChange={(v:any)=>setTestMonitor(v)}>
+                    {(list || []).map(m => <Select.Option key={m.id} value={m.id}>{m.name}</Select.Option>)}
+                  </Select>
+                  <Button type="primary" onClick={sendTestNotify}>发送测试通知</Button>
+                </Space>
               </div>
             </Tabs.TabPane>
           </Tabs>

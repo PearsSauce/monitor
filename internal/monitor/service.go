@@ -8,6 +8,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -367,7 +368,51 @@ func (s *Service) CheckMonitor(id int) error {
 			shouldNotify = false
 		}
 		if shouldNotify {
-			notify.SendResend(s.cfg.ResendAPIKey, "monitor alert", s.alertEmailTo(), s.buildStatusChangeEmail(m, online, statusCode, errStr))
+			var (
+				enable       sql.NullBool
+				notifyEvents sql.NullString
+				smtpServer   sql.NullString
+				smtpPort     sql.NullInt64
+				smtpUser     sql.NullString
+				smtpPassword sql.NullString
+				fromEmail    sql.NullString
+				toEmails     sql.NullString
+			)
+			_ = s.db.QueryRow(`SELECT enable_notifications, notify_events, smtp_server, smtp_port, smtp_user, smtp_password, from_email, to_emails FROM app_settings ORDER BY id DESC LIMIT 1`).
+				Scan(&enable, &notifyEvents, &smtpServer, &smtpPort, &smtpUser, &smtpPassword, &fromEmail, &toEmails)
+			enabled := ifNullBool(enable, true)
+			if enabled {
+				events := ifNullCSV(notifyEvents, []string{"online", "offline", "ssl_expiry"})
+				wantEvent := "offline"
+				if online {
+					wantEvent = "online"
+				}
+				if contains(events, wantEvent) {
+					recips := toList(ifNullStr(toEmails, ""))
+					if len(recips) == 0 {
+						var to string
+						_ = s.db.QueryRow(`SELECT email FROM admin_users ORDER BY id LIMIT 1`).Scan(&to)
+						if strings.TrimSpace(to) != "" {
+							recips = append(recips, to)
+						}
+					}
+					host := ifNullStr(smtpServer, "")
+					user := ifNullStr(smtpUser, "")
+					pass := ifNullStr(smtpPassword, "")
+					port := ifNullInt(smtpPort, 0)
+					from := ifNullStr(fromEmail, "")
+					if strings.TrimSpace(host) != "" && port > 0 && strings.TrimSpace(user) != "" && strings.TrimSpace(pass) != "" && strings.TrimSpace(from) != "" {
+						var siteName sql.NullString
+						_ = s.db.QueryRow(`SELECT site_name FROM app_settings ORDER BY id DESC LIMIT 1`).Scan(&siteName)
+						subject := notify.SubjectStatusChange(wantEvent, m.Name, ifNullStr(siteName, "服务监控系统"))
+						nowStr := time.Now().Format(time.RFC3339)
+						html := notify.BodyStatusChange(ifNullStr(siteName, "服务监控系统"), m.Name, m.URL, wantEvent, nowStr, statusCode, errStr)
+						for _, to := range recips {
+							go notify.SendSMTP(host, port, user, pass, from, to, subject, html)
+						}
+					}
+				}
+			}
 			_, _ = s.db.Exec(`INSERT INTO notifications(monitor_id,type,message) VALUES($1,$2,$3)`, m.ID, "status_change", s.buildStatusChangeEmail(m, online, statusCode, errStr))
 		}
 		if s.evt != nil {
@@ -437,7 +482,47 @@ func (s *Service) checkSSL(m *model.Monitor) {
 		msg := s.buildSSLExpiryEmail(*m, daysLeft, expires)
 		// apply cooldown for ssl notifications too
 		if s.allowedToNotify(m.ID, "ssl_expiry", s.cfg.NotifyCooldownMinutes) {
-			notify.SendResend(s.cfg.ResendAPIKey, "SSL 证书到期提醒", s.alertEmailTo(), msg)
+			var (
+				enable       sql.NullBool
+				notifyEvents sql.NullString
+				smtpServer   sql.NullString
+				smtpPort     sql.NullInt64
+				smtpUser     sql.NullString
+				smtpPassword sql.NullString
+				fromEmail    sql.NullString
+				toEmails     sql.NullString
+			)
+			_ = s.db.QueryRow(`SELECT enable_notifications, notify_events, smtp_server, smtp_port, smtp_user, smtp_password, from_email, to_emails FROM app_settings ORDER BY id DESC LIMIT 1`).
+				Scan(&enable, &notifyEvents, &smtpServer, &smtpPort, &smtpUser, &smtpPassword, &fromEmail, &toEmails)
+			enabled := ifNullBool(enable, true)
+			if enabled {
+				events := ifNullCSV(notifyEvents, []string{"online", "offline", "ssl_expiry"})
+				if contains(events, "ssl_expiry") {
+					recips := toList(ifNullStr(toEmails, ""))
+					if len(recips) == 0 {
+						var to string
+						_ = s.db.QueryRow(`SELECT email FROM admin_users ORDER BY id LIMIT 1`).Scan(&to)
+						if strings.TrimSpace(to) != "" {
+							recips = append(recips, to)
+						}
+					}
+					host := ifNullStr(smtpServer, "")
+					user := ifNullStr(smtpUser, "")
+					pass := ifNullStr(smtpPassword, "")
+					port := ifNullInt(smtpPort, 0)
+					from := ifNullStr(fromEmail, "")
+					if strings.TrimSpace(host) != "" && port > 0 && strings.TrimSpace(user) != "" && strings.TrimSpace(pass) != "" && strings.TrimSpace(from) != "" {
+						var siteName sql.NullString
+						_ = s.db.QueryRow(`SELECT site_name FROM app_settings ORDER BY id DESC LIMIT 1`).Scan(&siteName)
+						subject := notify.SubjectSSLExpiry(m.Name, ifNullStr(siteName, "服务监控系统"))
+						nowStr := time.Now().Format(time.RFC3339)
+						html := notify.BodySSLExpiry(ifNullStr(siteName, "服务监控系统"), m.Name, m.URL, daysLeft, expires.Format(time.RFC3339), nowStr)
+						for _, to := range recips {
+							go notify.SendSMTP(host, port, user, pass, from, to, subject, html)
+						}
+					}
+				}
+			}
 			_, _ = s.db.Exec(`INSERT INTO notifications(monitor_id,type,message) VALUES($1,$2,$3)`, m.ID, "ssl_expiry", msg)
 		}
 		if s.evt != nil {
@@ -482,6 +567,68 @@ func nullIfEmpty(s string) interface{} {
 		return nil
 	}
 	return s
+}
+
+func getenvDefault(k, def string) string {
+	v := os.Getenv(k)
+	if strings.TrimSpace(v) == "" {
+		return def
+	}
+	return v
+}
+func getenvIntDefault(k string, def int) int {
+	v := strings.TrimSpace(os.Getenv(k))
+	if v == "" {
+		return def
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil {
+		return def
+	}
+	return n
+}
+func ifNullStr(v sql.NullString, def string) string {
+	if v.Valid && strings.TrimSpace(v.String) != "" {
+		return v.String
+	}
+	return def
+}
+func ifNullInt(v sql.NullInt64, def int) int {
+	if v.Valid {
+		return int(v.Int64)
+	}
+	return def
+}
+func ifNullBool(v sql.NullBool, def bool) bool {
+	if v.Valid {
+		return v.Bool
+	}
+	return def
+}
+func ifNullCSV(v sql.NullString, def []string) []string {
+	if v.Valid && strings.TrimSpace(v.String) != "" {
+		return toList(v.String)
+	}
+	return def
+}
+func defaultCSV(s string) []string { return toList(s) }
+func toList(s string) []string {
+	var out []string
+	for _, p := range strings.Split(s, ",") {
+		p = strings.TrimSpace(p)
+		if p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+func contains(list []string, v string) bool {
+	for _, it := range list {
+		if strings.EqualFold(strings.TrimSpace(it), strings.TrimSpace(v)) {
+			return true
+		}
+	}
+	return false
 }
 
 func hostFromURL(u string) string {

@@ -18,6 +18,7 @@ import (
 	"monitor/internal/db"
 	"monitor/internal/model"
 	"monitor/internal/monitor"
+	"monitor/internal/notify"
 
 	"github.com/golang-jwt/jwt/v5"
 )
@@ -95,6 +96,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("/api/groups", s.handleGroups)
 	s.mux.HandleFunc("/api/groups/", s.handleGroupByID)
 	s.mux.HandleFunc("/api/notifications", s.handleNotifications)
+	s.mux.HandleFunc("/api/notifications/test", s.handleNotificationsTest)
 	s.mux.HandleFunc("/api/events", s.handleEvents)
 	s.mux.HandleFunc("/api/ssl/", s.handleSSL)
 	s.mux.HandleFunc("/api/setup/state", s.handleSetupState)
@@ -595,39 +597,100 @@ func (s *Server) handleSettings(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
 		type resp struct {
-			RetentionDays        int `json:"retention_days"`
-			FlapThreshold        int `json:"flap_threshold"`
-			CheckIntervalSeconds int `json:"check_interval_seconds"`
+			RetentionDays        int      `json:"retention_days"`
+			FlapThreshold        int      `json:"flap_threshold"`
+			CheckIntervalSeconds int      `json:"check_interval_seconds"`
+			DebounceSeconds      int      `json:"debounce_seconds"`
+			SiteName             string   `json:"site_name"`
+			Subtitle             string   `json:"subtitle"`
+			TabSubtitle          string   `json:"tab_subtitle"`
+			EnableNotifications  bool     `json:"enable_notifications"`
+			NotifyEvents         []string `json:"notify_events"`
+			SMTPServer           string   `json:"smtp_server"`
+			SMTPPort             int      `json:"smtp_port"`
+			SMTPUser             string   `json:"smtp_user"`
+			SMTPPassword         string   `json:"smtp_password"`
+			FromEmail            string   `json:"from_email"`
+			ToEmails             string   `json:"to_emails"`
 		}
-		writeJSON(w, resp{RetentionDays: s.cfg.RetentionDays, FlapThreshold: s.cfg.FlapThreshold, CheckIntervalSeconds: int(s.cfg.DefaultCheckInterval.Seconds())})
+		var (
+			siteName, subtitle, tabSubtitle, notifyEvents, smtpServer, smtpUser, smtpPassword, fromEmail sql.NullString
+			debounce, smtpPort, retentionDays, flapThreshold, checkInterval                              sql.NullInt64
+			enable                                                                                       sql.NullBool
+		)
+		var toEmails sql.NullString
+		_ = s.s.DB().QueryRow(`SELECT site_name, subtitle, tab_subtitle, debounce_seconds, enable_notifications, notify_events, smtp_server, smtp_port, smtp_user, smtp_password, from_email, to_emails, retention_days, flap_threshold, check_interval_seconds FROM app_settings ORDER BY id DESC LIMIT 1`).
+			Scan(&siteName, &subtitle, &tabSubtitle, &debounce, &enable, &notifyEvents, &smtpServer, &smtpPort, &smtpUser, &smtpPassword, &fromEmail, &toEmails, &retentionDays, &flapThreshold, &checkInterval)
+		out := resp{
+			RetentionDays:        ifNullInt(retentionDays, 30),
+			FlapThreshold:        ifNullInt(flapThreshold, 2),
+			CheckIntervalSeconds: ifNullInt(checkInterval, 60),
+			DebounceSeconds:      ifNullInt(debounce, 0),
+			SiteName:             ifNullStr(siteName, "服务监控系统"),
+			Subtitle:             ifNullStr(subtitle, ""),
+			TabSubtitle:          ifNullStr(tabSubtitle, ""),
+			EnableNotifications:  ifNullBool(enable, true),
+			NotifyEvents:         ifNullCSV(notifyEvents, []string{"online", "offline", "ssl_expiry"}),
+			SMTPServer:           ifNullStr(smtpServer, ""),
+			SMTPPort:             ifNullInt(smtpPort, 0),
+			SMTPUser:             ifNullStr(smtpUser, ""),
+			SMTPPassword:         ifNullStr(smtpPassword, ""),
+			FromEmail:            ifNullStr(fromEmail, ""),
+			ToEmails:             ifNullStr(toEmails, ""),
+		}
+		writeJSON(w, out)
 	case http.MethodPut:
 		if !s.adminOK(r) {
 			http.Error(w, "unauthorized", 401)
 			return
 		}
 		var in struct {
-			RetentionDays        int `json:"retention_days"`
-			FlapThreshold        int `json:"flap_threshold"`
-			CheckIntervalSeconds int `json:"check_interval_seconds"`
+			RetentionDays        int      `json:"retention_days"`
+			FlapThreshold        int      `json:"flap_threshold"`
+			CheckIntervalSeconds int      `json:"check_interval_seconds"`
+			DebounceSeconds      *int     `json:"debounce_seconds"`
+			SiteName             *string  `json:"site_name"`
+			Subtitle             *string  `json:"subtitle"`
+			TabSubtitle          *string  `json:"tab_subtitle"`
+			EnableNotifications  *bool    `json:"enable_notifications"`
+			NotifyEvents         []string `json:"notify_events"`
+			SMTPServer           *string  `json:"smtp_server"`
+			SMTPPort             *int     `json:"smtp_port"`
+			SMTPUser             *string  `json:"smtp_user"`
+			SMTPPassword         *string  `json:"smtp_password"`
+			FromEmail            *string  `json:"from_email"`
+			ToEmails             *string  `json:"to_emails"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
 			http.Error(w, "invalid json", 400)
 			return
 		}
-		if in.RetentionDays > 0 {
-			s.cfg.RetentionDays = in.RetentionDays
+		var count int
+		_ = s.s.DB().QueryRow(`SELECT COUNT(*) FROM app_settings`).Scan(&count)
+		if count == 0 {
+			_, _ = s.s.DB().Exec(`INSERT INTO app_settings(id, site_name, subtitle, tab_subtitle, debounce_seconds, enable_notifications, notify_events, smtp_server, smtp_port, smtp_user, smtp_password, from_email, to_emails, retention_days, flap_threshold, check_interval_seconds)
+				VALUES(1,$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
+				in.SiteName, in.Subtitle, in.TabSubtitle, in.DebounceSeconds, in.EnableNotifications, strings.Join(in.NotifyEvents, ","), in.SMTPServer, in.SMTPPort, in.SMTPUser, in.SMTPPassword, in.FromEmail, in.ToEmails, nullIfZero(in.RetentionDays), nullIfZero(in.FlapThreshold), nullIfZero(in.CheckIntervalSeconds))
+		} else {
+			_, _ = s.s.DB().Exec(`UPDATE app_settings SET 
+				site_name=COALESCE($1, site_name),
+				subtitle=COALESCE($2, subtitle),
+				tab_subtitle=COALESCE($3, tab_subtitle),
+				debounce_seconds=COALESCE($4, debounce_seconds),
+				enable_notifications=COALESCE($5, enable_notifications),
+				notify_events=COALESCE($6, notify_events),
+				smtp_server=COALESCE($7, smtp_server),
+				smtp_port=COALESCE($8, smtp_port),
+				smtp_user=COALESCE($9, smtp_user),
+				smtp_password=COALESCE($10, smtp_password),
+				from_email=COALESCE($11, from_email),
+				to_emails=COALESCE($12, to_emails),
+				retention_days=COALESCE($13, retention_days),
+				flap_threshold=COALESCE($14, flap_threshold),
+				check_interval_seconds=COALESCE($15, check_interval_seconds)
+			WHERE id=(SELECT id FROM app_settings ORDER BY id DESC LIMIT 1)`,
+				in.SiteName, in.Subtitle, in.TabSubtitle, in.DebounceSeconds, in.EnableNotifications, strings.Join(in.NotifyEvents, ","), in.SMTPServer, in.SMTPPort, in.SMTPUser, in.SMTPPassword, in.FromEmail, in.ToEmails, nullIfZero(in.RetentionDays), nullIfZero(in.FlapThreshold), nullIfZero(in.CheckIntervalSeconds))
 		}
-		if in.FlapThreshold > 0 {
-			s.cfg.FlapThreshold = in.FlapThreshold
-		}
-		if in.CheckIntervalSeconds > 0 {
-			s.cfg.DefaultCheckInterval = time.Duration(in.CheckIntervalSeconds) * time.Second
-		}
-		updateEnv(map[string]string{
-			"RETENTION_DAYS":         strconv.Itoa(s.cfg.RetentionDays),
-			"FLAP_THRESHOLD":         strconv.Itoa(s.cfg.FlapThreshold),
-			"CHECK_INTERVAL_SECONDS": strconv.Itoa(int(s.cfg.DefaultCheckInterval.Seconds())),
-		})
 		w.WriteHeader(204)
 	default:
 		w.WriteHeader(405)
@@ -719,6 +782,159 @@ func (s *Server) handleNotifications(w http.ResponseWriter, r *http.Request) {
 		list = append(list, it)
 	}
 	writeJSON(w, list)
+}
+
+func (s *Server) handleNotificationsTest(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		w.WriteHeader(405)
+		return
+	}
+	if !s.adminOK(r) {
+		http.Error(w, "unauthorized", 401)
+		return
+	}
+	var in struct {
+		Type      string `json:"type"`
+		MonitorID int    `json:"monitor_id"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+		http.Error(w, "invalid json", 400)
+		return
+	}
+	if in.MonitorID <= 0 || (in.Type != "online" && in.Type != "offline" && in.Type != "ssl_expiry") {
+		http.Error(w, "invalid payload", 400)
+		return
+	}
+	var name, url string
+	_ = s.s.DB().QueryRow(`SELECT COALESCE(name,''), COALESCE(url,'') FROM monitors WHERE id=$1`, in.MonitorID).Scan(&name, &url)
+	var enable sql.NullBool
+	var notifyEvents sql.NullString
+	var smtpServer sql.NullString
+	var smtpPort sql.NullInt64
+	var smtpUser sql.NullString
+	var smtpPassword sql.NullString
+	var fromEmail sql.NullString
+	var toEmails sql.NullString
+	_ = s.s.DB().QueryRow(`SELECT enable_notifications, notify_events, smtp_server, smtp_port, smtp_user, smtp_password, from_email, to_emails FROM app_settings ORDER BY id DESC LIMIT 1`).
+		Scan(&enable, &notifyEvents, &smtpServer, &smtpPort, &smtpUser, &smtpPassword, &fromEmail, &toEmails)
+	var insertType string
+	var msg string
+	switch in.Type {
+	case "online":
+		insertType = "status_change"
+		msg = "服务恢复(测试)"
+	case "offline":
+		insertType = "status_change"
+		msg = "服务离线(测试)"
+	case "ssl_expiry":
+		insertType = "ssl_expiry"
+		msg = "证书到期(测试)"
+	}
+	_, err := s.s.DB().Exec(`INSERT INTO notifications(monitor_id,type,message) VALUES($1,$2,$3)`, in.MonitorID, insertType, msg)
+	if err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
+	enabled := ifNullBool(enable, true)
+	if !enabled {
+		w.WriteHeader(204)
+		return
+	}
+	events := ifNullCSV(notifyEvents, []string{"online", "offline", "ssl_expiry"})
+	want := false
+	for _, e := range events {
+		if strings.TrimSpace(e) == in.Type {
+			want = true
+			break
+		}
+	}
+	if want {
+		recips := []string{}
+		if toEmails.Valid && strings.TrimSpace(toEmails.String) != "" {
+			for _, p := range strings.Split(toEmails.String, ",") {
+				p = strings.TrimSpace(p)
+				if p != "" {
+					recips = append(recips, p)
+				}
+			}
+		} else {
+			var to string
+			_ = s.s.DB().QueryRow(`SELECT email FROM admin_users ORDER BY id LIMIT 1`).Scan(&to)
+			if to != "" {
+				recips = append(recips, to)
+			}
+		}
+		if len(recips) > 0 {
+			var siteName sql.NullString
+			_ = s.s.DB().QueryRow(`SELECT site_name FROM app_settings ORDER BY id DESC LIMIT 1`).Scan(&siteName)
+			subject := notify.SubjectTest(in.Type, name, ifNullStr(siteName, "服务监控系统"))
+			html := notify.BodyTest(ifNullStr(siteName, "服务监控系统"), name, url, in.Type, time.Now().Format(time.RFC3339))
+			from := ifNullStr(fromEmail, "")
+			host := ifNullStr(smtpServer, "")
+			user := ifNullStr(smtpUser, "")
+			pass := ifNullStr(smtpPassword, "")
+			port := ifNullInt(smtpPort, 0)
+			if strings.TrimSpace(host) == "" || port <= 0 || strings.TrimSpace(user) == "" || strings.TrimSpace(pass) == "" || strings.TrimSpace(from) == "" {
+				http.Error(w, "SMTP配置不完整", 400)
+				return
+			}
+			for _, to := range recips {
+				if err := notify.SendSMTP(host, port, user, pass, from, to, subject, html); err != nil {
+					log.Printf("smtp send failed: %v", err)
+					http.Error(w, "SMTP发送失败: "+err.Error(), 500)
+					return
+				}
+				log.Printf("smtp sent ok to=%s server=%s port=%d", to, host, port)
+			}
+		}
+	}
+	w.WriteHeader(204)
+}
+
+func max(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
+}
+
+func ifNullStr(v sql.NullString, def string) string {
+	if v.Valid && strings.TrimSpace(v.String) != "" {
+		return v.String
+	}
+	return def
+}
+func ifNullInt(v sql.NullInt64, def int) int {
+	if v.Valid {
+		return int(v.Int64)
+	}
+	return def
+}
+func ifNullBool(v sql.NullBool, def bool) bool {
+	if v.Valid {
+		return v.Bool
+	}
+	return def
+}
+func ifNullCSV(v sql.NullString, def []string) []string {
+	if v.Valid && strings.TrimSpace(v.String) != "" {
+		var out []string
+		for _, p := range strings.Split(v.String, ",") {
+			p = strings.TrimSpace(p)
+			if p != "" {
+				out = append(out, p)
+			}
+		}
+		return out
+	}
+	return def
+}
+
+func nullIfZero(v int) interface{} {
+	if v == 0 {
+		return nil
+	}
+	return v
 }
 
 func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {

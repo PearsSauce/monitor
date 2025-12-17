@@ -77,6 +77,20 @@ func Migrate(db *sql.DB) error {
 			alert_before_days INT,
 			check_interval_seconds INT
 		);`,
+		`ALTER TABLE app_settings ADD COLUMN IF NOT EXISTS site_name TEXT;`,
+		`ALTER TABLE app_settings ADD COLUMN IF NOT EXISTS subtitle TEXT;`,
+		`ALTER TABLE app_settings ADD COLUMN IF NOT EXISTS tab_subtitle TEXT;`,
+		`ALTER TABLE app_settings ADD COLUMN IF NOT EXISTS debounce_seconds INT;`,
+		`ALTER TABLE app_settings ADD COLUMN IF NOT EXISTS enable_notifications BOOLEAN;`,
+		`ALTER TABLE app_settings ADD COLUMN IF NOT EXISTS notify_events TEXT;`,
+		`ALTER TABLE app_settings ADD COLUMN IF NOT EXISTS smtp_server TEXT;`,
+		`ALTER TABLE app_settings ADD COLUMN IF NOT EXISTS smtp_port INT;`,
+		`ALTER TABLE app_settings ADD COLUMN IF NOT EXISTS smtp_user TEXT;`,
+		`ALTER TABLE app_settings ADD COLUMN IF NOT EXISTS smtp_password TEXT;`,
+		`ALTER TABLE app_settings ADD COLUMN IF NOT EXISTS from_email TEXT;`,
+		`ALTER TABLE app_settings ADD COLUMN IF NOT EXISTS retention_days INT;`,
+		`ALTER TABLE app_settings ADD COLUMN IF NOT EXISTS flap_threshold INT;`,
+		`ALTER TABLE app_settings ADD COLUMN IF NOT EXISTS to_emails TEXT;`,
 		// Alter existing columns to BIGINT for snowflake IDs (safe if already BIGINT)
 		`DO $$
 		BEGIN
