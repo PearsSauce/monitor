@@ -36,40 +36,44 @@ export const NotificationTicker: React.FC<NotificationTickerProps> = ({ notices,
   return (
     <Card
       className="cursor-pointer rounded-xl shadow-none bg-white dark:bg-neutral-900 border-slate-200 dark:border-neutral-800/60"
-      bodyStyle={{ padding: 0 }}
+      bodyStyle={{ padding: 0, display: 'flex', alignItems: 'center', height: 48 }}
       style={{ overflow: 'hidden', borderLeft: '4px solid rgb(var(--red-6))' }}
       onClick={onClick}
     >
-      <Carousel
-        autoPlay
-        indicatorType="never"
-        showArrow="never"
-        direction="vertical"
-        style={{ height: 48, lineHeight: '48px' }}
-        timingFunc="linear"
-      >
-        {notices.map((notice) => (
-          <div key={notice.id} style={{ padding: '0 16px', height: '100%', display: 'flex', alignItems: 'center' }}>
-            <IconNotification style={{ fontSize: 20, color: 'rgb(var(--red-6))' }} />
-            <div style={{ flex: 1, display: 'flex', justifyContent: 'center' }}>
-              <Space size={12} className="items-center">
-                <Tag color={notice.type === 'status_change' ? 'red' : notice.type === 'ssl_expiry' ? 'orange' : 'blue'} size="small">
+      <div className="shrink-0 pl-2 md:pl-4 pr-2 flex items-center justify-center h-full">
+        <IconNotification style={{ fontSize: 20, color: 'rgb(var(--red-6))' }} />
+      </div>
+      <div className="flex-1 min-w-0 h-full">
+        <Carousel
+          autoPlay
+          indicatorType="never"
+          showArrow="never"
+          direction="vertical"
+          style={{ height: 48, lineHeight: '48px' }}
+          timingFunc="linear"
+        >
+          {notices.map((notice) => (
+            <div key={notice.id} className="h-full flex items-center justify-start sm:justify-center pr-2 md:pr-4">
+              <div className="flex items-center gap-2 sm:gap-3 w-full justify-start sm:justify-center">
+                <Tag color={notice.type === 'status_change' ? 'red' : notice.type === 'ssl_expiry' ? 'orange' : 'blue'} size="small" className="shrink-0">
                   {notice.type === 'status_change' ? '状态变更' : notice.type === 'ssl_expiry' ? 'SSL过期' : notice.type}
                 </Tag>
-                <Typography.Text style={{ color: 'var(--color-text-2)', fontSize: 12 }}>
+                <Typography.Text style={{ color: 'var(--color-text-2)', fontSize: 12 }} className="hidden sm:inline shrink-0">
                   {new Date(notice.created_at).toLocaleTimeString()}
                 </Typography.Text>
-                <Typography.Paragraph 
-                  ellipsis={{ rows: 1, showTooltip: true }} 
-                  style={{ margin: 0, color: 'var(--color-text-1)', textAlign: 'center' }}
-                >
-                  <span style={{ fontWeight: 500 }}>[{notice.monitor_name}]</span> {notice.message}
-                </Typography.Paragraph>
-              </Space>
+                <div className="min-w-0 text-left sm:text-center">
+                  <Typography.Paragraph 
+                    ellipsis={{ rows: 1, showTooltip: true }} 
+                    style={{ margin: 0, color: 'var(--color-text-1)' }}
+                  >
+                    <span style={{ fontWeight: 500 }}>[{notice.monitor_name}]</span> {notice.message}
+                  </Typography.Paragraph>
+                </div>
+              </div>
             </div>
-          </div>
-        ))}
-      </Carousel>
+          ))}
+        </Carousel>
+      </div>
     </Card>
   );
 };

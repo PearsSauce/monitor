@@ -165,19 +165,19 @@ export default function Admin() {
   
   return (
     <Layout className="min-h-screen bg-slate-50 dark:bg-black transition-colors duration-300">
-      <Layout.Header className="bg-white dark:bg-neutral-900 shadow-sm border-b border-slate-200 dark:border-neutral-800 px-6 h-16 sticky top-0 z-50 transition-colors duration-300">
+      <Layout.Header className="bg-white dark:bg-neutral-900 shadow-sm border-b border-slate-200 dark:border-neutral-800 px-4 md:px-6 h-16 sticky top-0 z-50 transition-colors duration-300">
         <div className="w-full max-w-screen-xl mx-auto flex items-center justify-between h-full">
           <div className="flex items-center gap-3 group cursor-default">
             <img src="/img/favicon.svg" alt="logo" className="w-8 h-8 transition-all duration-500 group-hover:rotate-12 group-hover:scale-110" />
             <div className="flex flex-col">
               <Typography.Title heading={5} style={{ margin: 0 }} className="text-slate-800 dark:text-neutral-100 animate-fade-in-up transition-colors duration-300 group-hover:text-blue-600 dark:group-hover:text-blue-400">{siteName}</Typography.Title>
-              {subtitle ? <Typography.Text className="text-slate-500 dark:text-neutral-400 text-xs animate-fade-in-up delay-200 ml-8">{subtitle}</Typography.Text> : null}
+              {subtitle ? <Typography.Text className="hidden md:block text-slate-500 dark:text-neutral-400 text-xs animate-fade-in-up delay-200 ml-8">{subtitle}</Typography.Text> : null}
             </div>
           </div>
           <Space>
             <Switch checked={dark} onChange={setDark} checkedIcon={<IconMoonFill />} uncheckedIcon={<IconSun />} />
-            <Button type="text" icon={<IconHome />} onClick={goDashboard} className="text-slate-600 dark:text-neutral-300 hover:text-blue-600 dark:hover:text-blue-400">返回首页</Button>
-            <Button type="text" status="danger" icon={<IconPoweroff />} onClick={logout}>退出登录</Button>
+            <Button type="text" icon={<IconHome />} onClick={goDashboard} className="text-slate-600 dark:text-neutral-300 hover:text-blue-600 dark:hover:text-blue-400"><span className="hidden md:inline">返回首页</span></Button>
+            <Button type="text" status="danger" icon={<IconPoweroff />} onClick={logout}><span className="hidden md:inline">退出登录</span></Button>
           </Space>
         </div>
       </Layout.Header>
@@ -196,13 +196,13 @@ export default function Admin() {
                   <Button type="primary" icon={<IconPlus />} onClick={openCreate}>新建监控</Button>
                   <Button icon={<IconSettings />} onClick={openGroups}>分类管理</Button>
                 </Space>
-                <Table rowKey="id" columns={columns as any} data={list} pagination={false} />
+                <Table rowKey="id" columns={columns as any} data={list} pagination={false} scroll={{ x: 600 }} />
               </div>
             </Tabs.TabPane>
             <Tabs.TabPane key="subs" title={<span><IconSettings /> 订阅列表</span>}>
               <div>
                 <Typography.Title heading={6}>订阅列表</Typography.Title>
-                <Table rowKey="id" data={subsAll} pagination={false} columns={[
+                <Table rowKey="id" data={subsAll} pagination={false} scroll={{ x: 600 }} columns={[
                   { title: '站点', dataIndex: 'monitor_name' },
                   { title: '邮箱', dataIndex: 'email', align: 'center' },
                   { title: '类型', dataIndex: 'notify_events', align: 'center', render: (v:any)=> {
@@ -239,12 +239,12 @@ export default function Admin() {
                 <Typography.Title heading={6} className="mb-4">数据与检测</Typography.Title>
                 <Form form={dataForm} layout="vertical">
                   <Grid.Row gutter={24}>
-                    <Grid.Col span={12}><Form.Item label="历史数据时间范围(天)" field="history_days_frontend" rules={[{ required: true }]}><InputNumber min={1} /></Form.Item></Grid.Col>
-                    <Grid.Col span={12}><Form.Item label="数据保留天数(后端)" field="retention_days" rules={[{ required: true }]}><InputNumber min={1} /></Form.Item></Grid.Col>
+                    <Grid.Col xs={24} sm={12}><Form.Item label="历史数据时间范围(天)" field="history_days_frontend" rules={[{ required: true }]}><InputNumber min={1} /></Form.Item></Grid.Col>
+                    <Grid.Col xs={24} sm={12}><Form.Item label="数据保留天数(后端)" field="retention_days" rules={[{ required: true }]}><InputNumber min={1} /></Form.Item></Grid.Col>
                   </Grid.Row>
                   <Grid.Row gutter={24}>
-                    <Grid.Col span={12}><Form.Item label="网站检测间隔(秒)" field="check_interval_seconds" rules={[{ required: true }]}><InputNumber min={10} /></Form.Item></Grid.Col>
-                    <Grid.Col span={12}><Form.Item label="防抖时间(秒)" field="debounce_seconds" rules={[{ required: true }]}><InputNumber min={0} /></Form.Item></Grid.Col>
+                    <Grid.Col xs={24} sm={12}><Form.Item label="网站检测间隔(秒)" field="check_interval_seconds" rules={[{ required: true }]}><InputNumber min={10} /></Form.Item></Grid.Col>
+                    <Grid.Col xs={24} sm={12}><Form.Item label="防抖时间(秒)" field="debounce_seconds" rules={[{ required: true }]}><InputNumber min={0} /></Form.Item></Grid.Col>
                   </Grid.Row>
                   <Form.Item label="震荡次数阈值" field="flap_threshold" rules={[{ required: true }]}><InputNumber min={1} /></Form.Item>
                 </Form>
@@ -267,14 +267,14 @@ export default function Admin() {
                   </Form.Item>
                   <Typography.Title heading={6} className="mt-2 mb-2">邮件通知</Typography.Title>
                   <Grid.Row gutter={24}>
-                    <Grid.Col span={12}><Form.Item label="SMTP服务器" field="smtp_server"><Input placeholder="smtp.example.com" /></Form.Item></Grid.Col>
-                    <Grid.Col span={6}><Form.Item label="端口" field="smtp_port"><InputNumber min={1} /></Form.Item></Grid.Col>
-                    <Grid.Col span={6}><Form.Item label="发件邮箱" field="from_email"><Input placeholder="noreply@example.com" /></Form.Item></Grid.Col>
+                    <Grid.Col xs={24} sm={12}><Form.Item label="SMTP服务器" field="smtp_server"><Input placeholder="smtp.example.com" /></Form.Item></Grid.Col>
+                    <Grid.Col xs={24} sm={6}><Form.Item label="端口" field="smtp_port"><InputNumber min={1} /></Form.Item></Grid.Col>
+                    <Grid.Col xs={24} sm={6}><Form.Item label="发件邮箱" field="from_email"><Input placeholder="noreply@example.com" /></Form.Item></Grid.Col>
                   </Grid.Row>
                   <Grid.Row gutter={24}>
-                    <Grid.Col span={8}><Form.Item label="用户名" field="smtp_user"><Input /></Form.Item></Grid.Col>
-                    <Grid.Col span={8}><Form.Item label="密码" field="smtp_password"><Input.Password /></Form.Item></Grid.Col>
-                    <Grid.Col span={8}><Form.Item label="收件人邮箱(逗号分隔)" field="to_emails"><Input placeholder="a@example.com,b@example.com" /></Form.Item></Grid.Col>
+                    <Grid.Col xs={24} sm={8}><Form.Item label="用户名" field="smtp_user"><Input /></Form.Item></Grid.Col>
+                    <Grid.Col xs={24} sm={8}><Form.Item label="密码" field="smtp_password"><Input.Password /></Form.Item></Grid.Col>
+                    <Grid.Col xs={24} sm={8}><Form.Item label="收件人邮箱(逗号分隔)" field="to_emails"><Input placeholder="a@example.com,b@example.com" /></Form.Item></Grid.Col>
                   </Grid.Row>
                 </Form>
                 <Divider />
@@ -283,7 +283,7 @@ export default function Admin() {
                 </Space>
                 <Divider />
                 <Typography.Title heading={6}>测试通知</Typography.Title>
-                <Space align="center">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2">
                   <Select style={{ width: 160 }} value={testType} onChange={setTestType}>
                     <Select.Option value="online">在线</Select.Option>
                     <Select.Option value="offline">离线</Select.Option>
@@ -293,7 +293,7 @@ export default function Admin() {
                     {(list || []).map(m => <Select.Option key={m.id} value={m.id}>{m.name}</Select.Option>)}
                   </Select>
                   <Button type="primary" onClick={sendTestNotify}>发送测试通知</Button>
-                </Space>
+                </div>
               </div>
             </Tabs.TabPane>
           </Tabs>
@@ -359,19 +359,19 @@ function MonitorForm({ visible, onClose, editing, groups, onOk }: { visible: boo
     }
   }
   return (
-    <Modal title={editing ? '编辑监控' : '新建监控'} visible={visible} onCancel={onClose} onOk={submit} okText="保存">
+    <Modal title={editing ? '编辑监控' : '新建监控'} visible={visible} onCancel={onClose} onOk={submit} okText="保存" style={{ width: '90%', maxWidth: 600 }}>
       <Form form={form} layout="vertical">
         <Form.Item label="名称" field="name" rules={[{ required: true }]}><Input /></Form.Item>
         <Form.Item label="URL" field="url" rules={[{ required: true }]}><Input /></Form.Item>
         <Grid.Row gutter={16}>
-          <Grid.Col span={12}><Form.Item label="请求方法" field="method"><Select><Select.Option value="GET">GET</Select.Option><Select.Option value="POST">POST</Select.Option><Select.Option value="HEAD">HEAD</Select.Option></Select></Form.Item></Grid.Col>
-          <Grid.Col span={12}><Form.Item label="分组" field="group_id"><Select allowClear>{(groups || []).map(g => <Select.Option key={g.id} value={g.id}>{g.name}</Select.Option>)}</Select></Form.Item></Grid.Col>
+          <Grid.Col xs={24} sm={12}><Form.Item label="请求方法" field="method"><Select><Select.Option value="GET">GET</Select.Option><Select.Option value="POST">POST</Select.Option><Select.Option value="HEAD">HEAD</Select.Option></Select></Form.Item></Grid.Col>
+          <Grid.Col xs={24} sm={12}><Form.Item label="分组" field="group_id"><Select allowClear>{(groups || []).map(g => <Select.Option key={g.id} value={g.id}>{g.name}</Select.Option>)}</Select></Form.Item></Grid.Col>
         </Grid.Row>
         <Form.Item label="请求头(JSON)" field="headers_json"><Input.TextArea placeholder='{"User-Agent":"Monitor"}' /></Form.Item>
         <Form.Item label="请求体" field="body"><Input.TextArea /></Form.Item>
         <Grid.Row gutter={16}>
-          <Grid.Col span={12}><Form.Item label="期望状态码下限" field="expected_status_min"><InputNumber min={100} max={599} /></Form.Item></Grid.Col>
-          <Grid.Col span={12}><Form.Item label="期望状态码上限" field="expected_status_max"><InputNumber min={100} max={599} /></Form.Item></Grid.Col>
+          <Grid.Col xs={24} sm={12}><Form.Item label="期望状态码下限" field="expected_status_min"><InputNumber min={100} max={599} /></Form.Item></Grid.Col>
+          <Grid.Col xs={24} sm={12}><Form.Item label="期望状态码上限" field="expected_status_max"><InputNumber min={100} max={599} /></Form.Item></Grid.Col>
         </Grid.Row>
         <Form.Item label="关键词检测" field="keyword"><Input /></Form.Item>
         <Form.Item label="检查间隔(秒)" field="interval_seconds"><InputNumber min={0} /></Form.Item>
@@ -397,8 +397,8 @@ function GroupManager({ visible, onClose, groups, onOk }: { visible: boolean; on
     onOk()
   }
   return (
-    <Modal title="分组管理" visible={visible} onCancel={onClose} onOk={save} okText="保存" style={{ width: 800 }}>
-      <Table rowKey="id" data={groups} pagination={false} columns={[
+    <Modal title="分组管理" visible={visible} onCancel={onClose} onOk={save} okText="保存" style={{ width: '90%', maxWidth: 800 }}>
+      <Table rowKey="id" data={groups} pagination={false} scroll={{ x: 500 }} columns={[
         { title: '名称', dataIndex: 'name' },
         { title: '图标', dataIndex: 'icon' },
         { title: '颜色', dataIndex: 'color', render: (v:any)=> <span style={{ backgroundColor: v, color: '#fff', padding: '2px 6px', borderRadius: 4 }}>{v || '-'}</span> },
