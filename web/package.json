@@ -10,8 +10,10 @@
   },
   "dependencies": {
     "@arco-design/web-react": "^2.63.0",
+    "@gsap/react": "^2.1.2",
     "@visactor/react-vchart": "^2.0.11",
     "@visactor/vchart": "^2.0.11",
+    "gsap": "^3.14.2",
     "react": "^18.2.0",
     "react-dom": "^18.2.0"
   },

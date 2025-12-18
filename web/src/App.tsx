@@ -1,10 +1,46 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useState, useRef } from 'react'
 import { Button, Card, Divider, Drawer, Form, Grid, Input, InputNumber, Message, Modal, Select, Space, Switch, Table, Tag, Typography, Layout, Menu, Breadcrumb, Avatar, Dropdown, Checkbox } from '@arco-design/web-react'
 import { IconMoonFill, IconSun, IconArrowLeft, IconDesktop, IconCheckCircle, IconCloseCircle, IconClockCircle, IconHome, IconNotification, IconUser, IconLaunch } from '@arco-design/web-react/icon'
 import { createGroup, createMonitor, deleteGroup, getGroups, getHistory, getHistoryByDay, getMonitors, getSSL, getSetupState, postSetup, updateGroup, updateMonitor, getSettings, updateSettings, getNotifications, getLatestResult, login, getToken } from './api'
 // 移除趋势与分布图组件
 import { NotificationTicker } from './components/NotificationTicker'
 import useTheme from './useTheme'
+import gsap from 'gsap'
+import { useGSAP } from '@gsap/react'
+
+gsap.registerPlugin(useGSAP)
+
+const AnimatedCounter = ({ value, className, suffix }: { value: number | string, className?: string, suffix?: string }) => {
+  const ref = useRef<HTMLSpanElement>(null)
+  
+  const { num, unit } = useMemo(() => {
+    if (typeof value === 'number') return { num: value, unit: suffix || '' }
+    const str = String(value)
+    const n = parseFloat(str)
+    if (isNaN(n)) return { num: null, unit: '' }
+    const u = suffix || str.replace(String(n), '')
+    return { num: n, unit: u }
+  }, [value, suffix])
+
+  const isNum = num !== null
+  
+  useGSAP(() => {
+    if (isNum && ref.current) {
+      gsap.from(ref.current, {
+        textContent: 0,
+        duration: 2,
+        ease: 'power3.out',
+        snap: { textContent: 1 }
+      })
+    }
+  }, [num])
+
+  return (
+    <div className={className}>
+      <span ref={ref}>{isNum ? num : value}</span>{isNum ? unit : ''}
+    </div>
+  )
+}
 
 type Monitor = {
   id: number
@@ -52,6 +88,38 @@ export default function App() {
   const [subtitle, setSubtitle] = useState('')
   const [showSubscribe, setShowSubscribe] = useState(false)
   const [subTarget, setSubTarget] = useState<Monitor | null>(null)
+  
+  const containerRef = useRef<HTMLDivElement>(null)
+
+  useGSAP(() => {
+    const tl = gsap.timeline()
+    
+    tl.from('.gsap-stat-card', {
+      y: 50,
+      scale: 0.9,
+      opacity: 0,
+      duration: 0.6,
+      ease: 'back.out(1.7)',
+      clearProps: 'all'
+    })
+    
+    tl.from('.gsap-card-icon', {
+      scale: 0,
+      rotation: -45,
+      opacity: 0,
+      duration: 0.5,
+      ease: 'back.out(1.5)',
+      clearProps: 'all'
+    }, '<0.2')
+
+    tl.from('.gsap-table-card', {
+      y: 30,
+      opacity: 0,
+      duration: 0.6,
+      ease: 'power3.out',
+      clearProps: 'all'
+    }, '-=0.4')
+  }, { scope: containerRef, dependencies: [view] })
 
   const fetchData = async () => {
     try {
@@ -200,14 +268,14 @@ export default function App() {
   ]
 
   return (
-    <Layout className="min-h-screen bg-slate-50 dark:bg-slate-950 transition-colors duration-300">
-      <Layout.Header className="bg-white dark:bg-slate-900 shadow-sm border-b border-slate-200 dark:border-slate-800 px-6 h-16 sticky top-0 z-50 transition-colors duration-300">
+    <Layout className="min-h-screen bg-slate-50 dark:bg-black transition-colors duration-300">
+      <Layout.Header className="bg-white dark:bg-neutral-900 shadow-sm border-b border-slate-200 dark:border-neutral-800 px-6 h-16 sticky top-0 z-50 transition-colors duration-300">
         <div className="w-full max-w-screen-xl mx-auto flex items-center justify-between h-full">
           <div className="flex items-center gap-3 group cursor-default">
             <img src="/img/favicon.svg" alt="logo" className="w-8 h-8 transition-all duration-500 group-hover:rotate-12 group-hover:scale-110" />
             <div className="flex flex-col">
-              <Typography.Title heading={5} className="!m-0 !text-slate-800 dark:!text-slate-100 animate-fade-in-up transition-colors duration-300 group-hover:text-blue-600 dark:group-hover:text-blue-400">{siteName}</Typography.Title>
-              {subtitle ? <Typography.Text className="text-slate-500 dark:text-slate-400 text-xs animate-fade-in-up delay-200 ml-8">{subtitle}</Typography.Text> : null}
+              <Typography.Title heading={5} className="!m-0 !text-slate-800 dark:!text-neutral-200 animate-fade-in-up transition-colors duration-300 group-hover:text-blue-600 dark:group-hover:text-blue-400">{siteName}</Typography.Title>
+              {subtitle ? <Typography.Text className="text-slate-500 dark:text-neutral-400 text-xs animate-fade-in-up delay-200 ml-8">{subtitle}</Typography.Text> : null}
             </div>
           </div>
           <Space size="medium">
@@ -227,53 +295,53 @@ export default function App() {
       <Layout className="px-6 py-4">
         {view === 'dashboard' ? (
           <Layout.Content>
-            <div className="w-full max-w-screen-xl mx-auto">
+            <div className="w-full max-w-screen-xl mx-auto" ref={containerRef}>
             <div className="mb-4">
                <NotificationTicker notices={notices} onClick={() => setView('notifications')} isDark={dark} />
             </div>
             
             <Grid.Row gutter={16}>
               <Grid.Col span={6}>
-                <Card className="h-32 relative overflow-hidden group rounded-xl shadow-none bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 transition-all duration-300 hover:-translate-y-1 hover:shadow-lg dark:hover:shadow-slate-800/50">
+                <Card className="gsap-stat-card h-32 relative overflow-hidden group rounded-xl shadow-none bg-white dark:bg-neutral-900 border-slate-200 dark:border-neutral-800/60 transition-all duration-300 hover:-translate-y-1 hover:shadow-lg dark:hover:shadow-neutral-900/50">
                   <div className="relative z-10">
-                    <Typography.Text className="text-slate-500 dark:text-slate-400 font-medium">总站点数</Typography.Text>
-                    <div className="text-4xl mt-2 font-bold text-slate-800 dark:text-slate-100">{totalCount}</div>
+                    <Typography.Text className="text-slate-500 dark:text-neutral-400 font-medium">总站点数</Typography.Text>
+                    <AnimatedCounter value={totalCount} className="text-4xl mt-2 font-bold text-slate-800 dark:text-neutral-200" />
                   </div>
-                  <IconDesktop className="absolute -right-4 -bottom-4 text-8xl text-blue-500 dark:text-blue-400 opacity-10 transform rotate-12 transition-all duration-500 group-hover:scale-110 group-hover:rotate-0 group-hover:opacity-20" />
+                  <IconDesktop className="gsap-card-icon absolute -right-4 -bottom-4 text-8xl text-blue-500 dark:text-blue-400 opacity-10 transform rotate-12 transition-all duration-500 group-hover:scale-110 group-hover:rotate-0 group-hover:opacity-20" />
                 </Card>
               </Grid.Col>
               <Grid.Col span={6}>
-                <Card className="h-32 relative overflow-hidden group rounded-xl shadow-none bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 transition-all duration-300 hover:-translate-y-1 hover:shadow-lg dark:hover:shadow-slate-800/50">
+                <Card className="gsap-stat-card h-32 relative overflow-hidden group rounded-xl shadow-none bg-white dark:bg-neutral-900 border-slate-200 dark:border-neutral-800/60 transition-all duration-300 hover:-translate-y-1 hover:shadow-lg dark:hover:shadow-neutral-900/50">
                   <div className="relative z-10">
-                    <Typography.Text className="text-slate-500 dark:text-slate-400 font-medium">在线站点</Typography.Text>
-                    <div className="text-4xl mt-2 font-bold text-green-600 dark:text-green-400">{onlineCount}</div>
+                    <Typography.Text className="text-slate-500 dark:text-neutral-400 font-medium">在线站点</Typography.Text>
+                    <AnimatedCounter value={onlineCount} className="text-4xl mt-2 font-bold text-green-600 dark:text-green-400" />
                   </div>
-                  <IconCheckCircle className="absolute -right-4 -bottom-4 text-8xl text-green-500 dark:text-green-400 opacity-10 transform rotate-12 transition-all duration-500 group-hover:scale-110 group-hover:rotate-0 group-hover:opacity-20" />
+                  <IconCheckCircle className="gsap-card-icon absolute -right-4 -bottom-4 text-8xl text-green-500 dark:text-green-400 opacity-10 transform rotate-12 transition-all duration-500 group-hover:scale-110 group-hover:rotate-0 group-hover:opacity-20" />
                 </Card>
               </Grid.Col>
               <Grid.Col span={6}>
-                <Card className="h-32 relative overflow-hidden group rounded-xl shadow-none bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 transition-all duration-300 hover:-translate-y-1 hover:shadow-lg dark:hover:shadow-slate-800/50">
+                <Card className="gsap-stat-card h-32 relative overflow-hidden group rounded-xl shadow-none bg-white dark:bg-neutral-900 border-slate-200 dark:border-neutral-800/60 transition-all duration-300 hover:-translate-y-1 hover:shadow-lg dark:hover:shadow-neutral-900/50">
                   <div className="relative z-10">
-                    <Typography.Text className="text-slate-500 dark:text-slate-400 font-medium">离线站点</Typography.Text>
-                    <div className="text-4xl mt-2 font-bold text-red-600 dark:text-red-400">{offlineCount}</div>
+                    <Typography.Text className="text-slate-500 dark:text-neutral-400 font-medium">离线站点</Typography.Text>
+                    <AnimatedCounter value={offlineCount} className="text-4xl mt-2 font-bold text-red-600 dark:text-red-400" />
                   </div>
-                  <IconCloseCircle className="absolute -right-4 -bottom-4 text-8xl text-red-500 dark:text-red-400 opacity-10 transform rotate-12 transition-all duration-500 group-hover:scale-110 group-hover:rotate-0 group-hover:opacity-20" />
+                  <IconCloseCircle className="gsap-card-icon absolute -right-4 -bottom-4 text-8xl text-red-500 dark:text-red-400 opacity-10 transform rotate-12 transition-all duration-500 group-hover:scale-110 group-hover:rotate-0 group-hover:opacity-20" />
                 </Card>
               </Grid.Col>
               <Grid.Col span={6}>
-                <Card className="h-32 relative overflow-hidden group rounded-xl shadow-none bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 transition-all duration-300 hover:-translate-y-1 hover:shadow-lg dark:hover:shadow-slate-800/50">
+                <Card className="gsap-stat-card h-32 relative overflow-hidden group rounded-xl shadow-none bg-white dark:bg-neutral-900 border-slate-200 dark:border-neutral-800/60 transition-all duration-300 hover:-translate-y-1 hover:shadow-lg dark:hover:shadow-neutral-900/50">
                   <div className="relative z-10">
-                    <Typography.Text className="text-slate-500 dark:text-slate-400 font-medium">平均响应</Typography.Text>
-                    <div className="text-4xl mt-2 font-bold text-indigo-600 dark:text-indigo-400">{avgRespAll}</div>
+                    <Typography.Text className="text-slate-500 dark:text-neutral-400 font-medium">平均响应</Typography.Text>
+                    <AnimatedCounter value={avgRespAll} className="text-4xl mt-2 font-bold text-indigo-600 dark:text-indigo-400" />
                   </div>
-                  <IconClockCircle className="absolute -right-4 -bottom-4 text-8xl text-indigo-500 dark:text-indigo-400 opacity-10 transform rotate-12 transition-all duration-500 group-hover:scale-110 group-hover:rotate-0 group-hover:opacity-20" />
+                  <IconClockCircle className="gsap-card-icon absolute -right-4 -bottom-4 text-8xl text-indigo-500 dark:text-indigo-400 opacity-10 transform rotate-12 transition-all duration-500 group-hover:scale-110 group-hover:rotate-0 group-hover:opacity-20" />
                 </Card>
               </Grid.Col>
             </Grid.Row>
             
             {/* 已移除 24小时响应趋势 与 当前响应分布 */}
     
-            <Card className="mt-4 rounded-xl shadow-none bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800" title="监控列表">
+            <Card className="gsap-table-card mt-4 rounded-xl shadow-none bg-white dark:bg-neutral-900 border-slate-200 dark:border-neutral-800/60" title="监控列表">
               <Table rowKey="id" columns={columns as any} data={filtered} pagination={false} border={false} />
             </Card>
             </div>
@@ -286,10 +354,11 @@ export default function App() {
               <Breadcrumb.Item>异常通知历史</Breadcrumb.Item>
             </Breadcrumb>
             <Card 
+              className="rounded-xl shadow-none bg-white dark:bg-neutral-900 border-slate-200 dark:border-neutral-800/60"
               title={
                 <Space>
                   <Button icon={<IconArrowLeft />} onClick={() => setView('dashboard')} shape="circle" />
-                  <Typography.Text>异常通知历史</Typography.Text>
+                  <Typography.Text className="dark:text-neutral-200">异常通知历史</Typography.Text>
                 </Space>
               }
             >

@@ -164,19 +164,19 @@ export default function Admin() {
   const openGroups = () => { setShowGroups(true) }
   
   return (
-    <Layout className="min-h-screen bg-slate-50 dark:bg-slate-950 transition-colors duration-300">
-      <Layout.Header className="bg-white dark:bg-slate-900 shadow-sm border-b border-slate-200 dark:border-slate-800 px-6 h-16 sticky top-0 z-50 transition-colors duration-300">
+    <Layout className="min-h-screen bg-slate-50 dark:bg-black transition-colors duration-300">
+      <Layout.Header className="bg-white dark:bg-neutral-900 shadow-sm border-b border-slate-200 dark:border-neutral-800 px-6 h-16 sticky top-0 z-50 transition-colors duration-300">
         <div className="w-full max-w-screen-xl mx-auto flex items-center justify-between h-full">
           <div className="flex items-center gap-3 group cursor-default">
             <img src="/img/favicon.svg" alt="logo" className="w-8 h-8 transition-all duration-500 group-hover:rotate-12 group-hover:scale-110" />
             <div className="flex flex-col">
-              <Typography.Title heading={5} style={{ margin: 0 }} className="text-slate-800 dark:text-slate-100 animate-fade-in-up transition-colors duration-300 group-hover:text-blue-600 dark:group-hover:text-blue-400">{siteName}</Typography.Title>
-              {subtitle ? <Typography.Text className="text-slate-500 dark:text-slate-400 text-xs animate-fade-in-up delay-200 ml-8">{subtitle}</Typography.Text> : null}
+              <Typography.Title heading={5} style={{ margin: 0 }} className="text-slate-800 dark:text-neutral-100 animate-fade-in-up transition-colors duration-300 group-hover:text-blue-600 dark:group-hover:text-blue-400">{siteName}</Typography.Title>
+              {subtitle ? <Typography.Text className="text-slate-500 dark:text-neutral-400 text-xs animate-fade-in-up delay-200 ml-8">{subtitle}</Typography.Text> : null}
             </div>
           </div>
           <Space>
             <Switch checked={dark} onChange={setDark} checkedIcon={<IconMoonFill />} uncheckedIcon={<IconSun />} />
-            <Button type="text" icon={<IconHome />} onClick={goDashboard} className="text-slate-600 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400">返回首页</Button>
+            <Button type="text" icon={<IconHome />} onClick={goDashboard} className="text-slate-600 dark:text-neutral-300 hover:text-blue-600 dark:hover:text-blue-400">返回首页</Button>
             <Button type="text" status="danger" icon={<IconPoweroff />} onClick={logout}>退出登录</Button>
           </Space>
         </div>
@@ -187,7 +187,7 @@ export default function Admin() {
           <Breadcrumb.Item>首页</Breadcrumb.Item>
           <Breadcrumb.Item>系统管理</Breadcrumb.Item>
         </Breadcrumb>
-        <Card className="shadow-sm rounded-lg bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800">
+        <Card className="shadow-sm rounded-lg bg-white dark:bg-neutral-900 border-slate-200 dark:border-neutral-800/60">
           <Tabs defaultActiveTab="sites">
             <Tabs.TabPane key="sites" title={<span><IconDesktop /> 站点管理</span>}>
               <div className="mb-4">
@@ -204,14 +204,21 @@ export default function Admin() {
                 <Typography.Title heading={6}>订阅列表</Typography.Title>
                 <Table rowKey="id" data={subsAll} pagination={false} columns={[
                   { title: '站点', dataIndex: 'monitor_name' },
-                  { title: '邮箱', dataIndex: 'email' },
-                  { title: '类型', dataIndex: 'notify_events', render: (v:any)=> {
+                  { title: '邮箱', dataIndex: 'email', align: 'center' },
+                  { title: '类型', dataIndex: 'notify_events', align: 'center', render: (v:any)=> {
                     const evs = String(v||'').split(',').map((s)=>s.trim()).filter(Boolean)
-                    return <Space>{evs.map((e,idx)=><Tag key={idx}>{e==='offline'?'离线':e==='online'?'恢复':'证书到期'}</Tag>)}</Space>
+                    return <Space>{evs.map((e,idx)=>{
+                      let color = 'gray'
+                      let text = e
+                      if(e==='offline') { color='red'; text='离线' }
+                      else if(e==='online') { color='green'; text='恢复' }
+                      else if(e==='ssl_expiry') { color='orange'; text='证书到期' }
+                      return <Tag key={idx} color={color}>{text}</Tag>
+                    })}</Space>
                   }},
-                  { title: '状态', dataIndex: 'verified', render: (v:any)=> <Tag color={v?'green':'arcoblue'}>{v?'已验证':'待验证'}</Tag> },
-                  { title: '时间', dataIndex: 'created_at', render: (v:any)=> (v ? new Date(v).toLocaleString() : '-') },
-                  { title: '操作', render: (_:any, r:any)=> <Button size="mini" status="danger" onClick={async()=>{ await deleteSubscription(r.id); Message.success('已删除'); setSubsAll(prev=>prev.filter(x=>x.id!==r.id)) }}>删除</Button> }
+                  { title: '状态', dataIndex: 'verified', align: 'center', render: (v:any)=> <Tag color={v?'green':'orange'}>{v?'已验证':'待验证'}</Tag> },
+                  { title: '时间', dataIndex: 'created_at', align: 'center', render: (v:any)=> (v ? new Date(v).toLocaleString() : '-') },
+                  { title: '操作', align: 'center', render: (_:any, r:any)=> <Button size="mini" status="danger" onClick={async()=>{ await deleteSubscription(r.id); Message.success('已删除'); setSubsAll(prev=>prev.filter(x=>x.id!==r.id)) }}>删除</Button> }
                 ] as any} />
               </div>
             </Tabs.TabPane>

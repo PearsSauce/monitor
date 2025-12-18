@@ -21,7 +21,7 @@ export const NotificationTicker: React.FC<NotificationTickerProps> = ({ notices,
   if (notices.length === 0) {
     return (
       <Card
-        className="cursor-pointer rounded-xl shadow-none bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800"
+        className="cursor-pointer rounded-xl shadow-none bg-white dark:bg-neutral-900 border-slate-200 dark:border-neutral-800/60"
         bodyStyle={{ padding: '12px 20px' }}
         onClick={onClick}
       >
@@ -35,7 +35,7 @@ export const NotificationTicker: React.FC<NotificationTickerProps> = ({ notices,
 
   return (
     <Card
-      className="cursor-pointer rounded-xl shadow-none bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800"
+      className="cursor-pointer rounded-xl shadow-none bg-white dark:bg-neutral-900 border-slate-200 dark:border-neutral-800/60"
       bodyStyle={{ padding: 0 }}
       style={{ overflow: 'hidden', borderLeft: '4px solid rgb(var(--red-6))' }}
       onClick={onClick}
