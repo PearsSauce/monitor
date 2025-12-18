@@ -581,13 +581,62 @@ func (s *Service) buildStatusChangeEmail(m model.Monitor, online bool, code int,
 	if !online {
 		status = "发生异常"
 	}
-	return "站点「" + m.Name + "」" + status + "，状态码=" + strconvI(code) + ", 错误=" + errStr
+	reason := s.statusReason(code, errStr)
+	return "站点「" + m.Name + "」" + status + "（" + reason + "），状态码=" + strconvI(code) + ", 错误=" + errStr
 }
 
 func (s *Service) buildSSLExpiryEmail(m model.Monitor, daysLeft int, expires time.Time) string {
 	return "站点「" + m.Name + "」SSL 证书还有 " + strconvI(daysLeft) + " 天过期（" + expires.Format(time.RFC3339) + "）"
 }
 
+func (s *Service) statusReason(code int, errStr string) string {
+	es := strings.ToLower(strings.TrimSpace(errStr))
+	if code == 0 {
+		if strings.Contains(es, "no such host") || strings.Contains(es, "dns") {
+			return "DNS解析失败，暂时离线"
+		}
+		if strings.Contains(es, "timeout") {
+			return "连接超时，暂时离线"
+		}
+		if strings.Contains(es, "refused") {
+			return "连接被拒绝，暂时离线"
+		}
+		if strings.Contains(es, "tls") || strings.Contains(es, "certificate") {
+			return "TLS握手失败，暂时离线"
+		}
+		if strings.Contains(es, "can't assign requested address") {
+			return "本机端口不足，暂时离线"
+		}
+		return "网络连接失败，暂时离线"
+	}
+	switch code {
+	case 502:
+		return "网关错误，暂时离线"
+	case 503:
+		return "服务不可用，暂时离线"
+	case 504:
+		return "网关超时，暂时离线"
+	case 408:
+		return "请求超时，暂时离线"
+	case 500:
+		return "服务器错误，暂时离线"
+	case 404:
+		return "资源未找到，暂时离线"
+	case 403:
+		return "拒绝访问，无法确定是否存活"
+	default:
+		if code >= 200 && code < 300 {
+			return "服务恢复"
+		}
+		if code >= 400 && code < 500 {
+			return "客户端错误，暂时离线"
+		}
+		if code >= 500 && code < 600 {
+			return "服务器错误，暂时离线"
+		}
+		return "未知状态，暂时离线"
+	}
+}
 func strconvI(i int) string { return strconv.Itoa(i) }
 
 func nullIfEmpty(s string) interface{} {

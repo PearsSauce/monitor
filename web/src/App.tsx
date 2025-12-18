@@ -82,6 +82,10 @@ export default function App() {
   const [showLogin, setShowLogin] = useState(false)
   const [needSetup, setNeedSetup] = useState(false)
   const [notices, setNotices] = useState<NotificationItem[]>([])
+  const [noticeTotal, setNoticeTotal] = useState(0)
+  const [noticePage, setNoticePage] = useState(1)
+  const [noticePageSize, setNoticePageSize] = useState(20)
+  const [noticeFilter, setNoticeFilter] = useState('all')
   const [view, setView] = useState<'dashboard' | 'notifications'>('dashboard')
   const [siteName, setSiteName] = useState('服务监控面板')
   const [tabSubtitle, setTabSubtitle] = useState('')
@@ -131,8 +135,9 @@ export default function App() {
       const sslEntries: Record<number, SSLInfo> = {}
       await Promise.all((Array.isArray(data) ? data : []).map(async (m:Monitor) => { sslEntries[m.id] = await getSSL(m.id).catch(()=>null) }))
       setSslMap(sslEntries)
-      const ns = await getNotifications(20).catch(()=>[])
-      setNotices(Array.isArray(ns) ? ns : [])
+      const nsRes = await getNotifications(1, 20).catch(()=>({ items: [], total: 0 }))
+      setNotices(nsRes.items)
+      setNoticeTotal(nsRes.total)
       const latestMap: Record<number, number> = {}
       await Promise.all((Array.isArray(data) ? data : []).map(async (m:Monitor) => {
         const lr = await getLatestResult(m.id).catch(()=>null)
@@ -229,11 +234,10 @@ export default function App() {
       }
     },
     {
-      title: <span className="inline-flex items-center justify-center"><IconClockCircle style={{ marginRight: 6 }} /> 响应</span>,
+      title: '响应',
       align: 'center' as const,
       render: (_: any, r: Monitor) => (
         <span className="inline-flex items-center justify-center">
-          <IconClockCircle style={{ marginRight: 6 }} />
           {typeof latest[r.id] === 'number' ? `${latest[r.id]} ms` : '-'}
         </span>
       )
@@ -356,21 +360,54 @@ export default function App() {
             <Card 
               className="rounded-xl shadow-none bg-white dark:bg-neutral-900 border-slate-200 dark:border-neutral-800/60"
               title={
-                <Space>
-                  <Button icon={<IconArrowLeft />} onClick={() => setView('dashboard')} shape="circle" />
-                  <Typography.Text className="dark:text-neutral-200">异常通知历史</Typography.Text>
-                </Space>
+                <div className="flex items-center justify-between">
+                  <Space>
+                    <Button icon={<IconArrowLeft />} onClick={() => setView('dashboard')} shape="circle" />
+                    <Typography.Text className="dark:text-neutral-200">异常通知历史</Typography.Text>
+                  </Space>
+                  <Select 
+                    style={{ width: 140 }} 
+                    value={noticeFilter} 
+                    onChange={(v) => {
+                      setNoticeFilter(v);
+                      setNoticePage(1);
+                      getNotifications(1, noticePageSize, v === 'all' ? '' : v).then(res => {
+                        setNotices(res.items);
+                        setNoticeTotal(res.total);
+                      });
+                    }}
+                    triggerProps={{ autoAlignPopupWidth: false, autoAlignPopupMinWidth: true, position: 'bl' }}
+                  >
+                    <Select.Option value="all">全部类型</Select.Option>
+                    <Select.Option value="offline">站点离线</Select.Option>
+                    <Select.Option value="recovery">站点恢复</Select.Option>
+                    <Select.Option value="ssl_expiry">证书到期</Select.Option>
+                  </Select>
+                </div>
               }
             >
               <Table 
                 rowKey="id" 
                 data={notices} 
-                pagination={{ pageSize: 20 }} 
+                pagination={{ 
+                  current: noticePage,
+                  pageSize: noticePageSize,
+                  total: noticeTotal,
+                  showTotal: (total) => `共 ${total} 条`,
+                  onChange: (page, size) => {
+                    setNoticePage(page)
+                    setNoticePageSize(size)
+                    getNotifications(page, size, noticeFilter === 'all' ? '' : noticeFilter).then(res => {
+                      setNotices(res.items)
+                      setNoticeTotal(res.total)
+                    }).catch(() => Message.error('获取通知失败'))
+                  }
+                }} 
                 columns={[
-                  { title: '时间', dataIndex: 'created_at', width: 200,
+                  { title: '时间', dataIndex: 'created_at', width: 180,
                     render: (v:any)=> (v ? new Date(v).toLocaleString() : '-') },
-                  { title: '站点', dataIndex: 'monitor_name', width: 200 },
-                  { title: '类型', dataIndex: 'type', width: 120, align: 'center',
+                  { title: '站点', dataIndex: 'monitor_name', width: 180 },
+                  { title: '类型', dataIndex: 'type', width: 100, align: 'center',
                     render: (v:any, r:any)=> {
                       let color = 'arcoblue'
                       let text = v
@@ -378,23 +415,49 @@ export default function App() {
                         const msg = (r.message || '').toLowerCase()
                         const isRecovery = msg.includes('恢复') || msg.includes('online') || msg.includes('up') || msg.includes('ok')
                         color = isRecovery ? 'green' : 'red'
-                        text = isRecovery ? '服务恢复' : '服务离线'
+                        text = isRecovery ? '站点恢复' : '站点离线'
                       } else if (v === 'ssl_expiry') {
                         color = 'orange'
-                        text = 'SSL过期'
+                        text = '证书到期'
                       }
                       return <Tag color={color}>{text}</Tag> 
                     }
                   },
-                  { title: '消息', dataIndex: 'message' }
+                  { title: '消息详情', dataIndex: 'message',
+                    render: (v: string) => {
+                      const match = v.match(/[，,]\s*状态码=(\d+)[，,]\s*错误=(.*)/)
+                      if (match) {
+                        const code = parseInt(match[1])
+                        const err = match[2]
+                        return (
+                          <div className="flex flex-col items-start gap-1">
+                            <div className="flex items-center gap-2">
+                                {code > 0 && <Tag size="small" color={code >= 200 && code < 300 ? 'green' : 'red'}>HTTP {code}</Tag>}
+                                {code === 0 && <Tag size="small" color="red">连接失败</Tag>}
+                            </div>
+                            {err ? (
+                                <Typography.Paragraph ellipsis={{ rows: 2, showTooltip: true, expandable: true }} className="!m-0 text-xs text-slate-500 dark:text-neutral-400">
+                                  {err}
+                                </Typography.Paragraph>
+                            ) : null}
+                          </div>
+                        )
+                      }
+                      return (
+                       <Typography.Paragraph ellipsis={{ rows: 2, showTooltip: true, expandable: true }} style={{ margin: 0 }}>
+                         {v}
+                       </Typography.Paragraph>
+                      )
+                    }
+                  }
                 ] as any} 
               />
             </Card>
             </div>
           </Layout.Content>
         )}
-        <Layout.Footer className="text-center text-gray-400 py-8">
-          Monitor System ©2024 Created with Arco Design
+        <Layout.Footer className="text-center text-slate-500 dark:text-neutral-500 text-sm py-8">
+          Monitor System &copy; {new Date().getFullYear()} Created with <a href="https://arco.design" target="_blank" rel="noreferrer" className="text-slate-500 hover:text-blue-500 transition-colors">Arco Design</a>
         </Layout.Footer>
       </Layout>
 
@@ -441,10 +504,25 @@ function StatusBar({ monitorId }: { monitorId: number }) {
     getHistoryByDay(monitorId, 30).then(setItems).catch(() => {})
   }, [monitorId])
   const blocks = useMemo(() => {
-    return (items || []).slice(0, 30).map((i, idx) => {
+    const days = (items || [])
+      .slice(0, 30)
+      .sort((a, b) => new Date(a.day).getTime() - new Date(b.day).getTime())
+    return days.map((i, idx) => {
       const ratio = i.total_count ? i.online_count / i.total_count : 0
-      const color = ratio >= 0.8 ? 'bg-green-500' : ratio >= 0.5 ? 'bg-yellow-500' : 'bg-red-500'
-      return <div title={`${i.day} 在线率 ${Math.round(ratio*100)}%`} key={idx} className={`h-3 w-3 mr-1 rounded ${color}`}></div>
+      let color = 'bg-red-500'
+      if (ratio >= 0.9) color = 'bg-green-600'
+      else if (ratio >= 0.7) color = 'bg-green-500'
+      else if (ratio >= 0.5) color = 'bg-yellow-500'
+      else if (ratio >= 0.3) color = 'bg-orange-500'
+      const titleParts = [
+        `${new Date(i.day).toLocaleDateString()}`,
+        `在线率 ${Math.round(ratio * 100)}%`,
+      ]
+      if (typeof i.avg_response_ms === 'number') {
+        titleParts.push(`平均响应 ${Math.round(i.avg_response_ms)} ms`)
+      }
+      const title = titleParts.join('，')
+      return <div title={title} key={idx} className={`h-4 w-4 mr-1.5 rounded ${color} transition-transform duration-200 hover:scale-125`}></div>
     })
   }, [items])
   return <div className="flex items-center justify-center">{blocks}</div>

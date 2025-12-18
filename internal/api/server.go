@@ -828,17 +828,46 @@ func (s *Server) handleNotifications(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(405)
 		return
 	}
+	page := 1
 	limit := 20
+	if v := r.URL.Query().Get("page"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			page = n
+		}
+	}
 	if v := r.URL.Query().Get("limit"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil && n > 0 && n <= 200 {
 			limit = n
 		}
 	}
-	rows, err := s.s.DB().Query(`SELECT n.id, n.monitor_id, n.created_at, n.type, n.message, m.name
+	offset := (page - 1) * limit
+
+	filterType := r.URL.Query().Get("type")
+	whereClause := ""
+	switch filterType {
+	case "offline":
+		whereClause = "WHERE n.type='status_change' AND n.message LIKE '%发生异常%'"
+	case "recovery":
+		whereClause = "WHERE n.type='status_change' AND n.message LIKE '%恢复在线%'"
+	case "ssl_expiry":
+		whereClause = "WHERE n.type='ssl_expiry'"
+	}
+
+	var total int
+	countQuery := "SELECT COUNT(*) FROM notifications n " + whereClause
+	if err := s.s.DB().QueryRow(countQuery).Scan(&total); err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
+
+	query := `SELECT n.id, n.monitor_id, n.created_at, n.type, n.message, m.name
 		FROM notifications n
-		JOIN monitors m ON m.id = n.monitor_id
-		ORDER BY n.created_at DESC
-		LIMIT $1`, limit)
+		JOIN monitors m ON m.id = n.monitor_id ` +
+		whereClause +
+		` ORDER BY n.created_at DESC
+		LIMIT $1 OFFSET $2`
+
+	rows, err := s.s.DB().Query(query, limit, offset)
 	if err != nil {
 		http.Error(w, err.Error(), 500)
 		return
@@ -863,7 +892,13 @@ func (s *Server) handleNotifications(w http.ResponseWriter, r *http.Request) {
 		it.CreatedAt = t.Format(time.RFC3339)
 		list = append(list, it)
 	}
-	writeJSON(w, list)
+	if list == nil {
+		list = []item{}
+	}
+	writeJSON(w, map[string]interface{}{
+		"items": list,
+		"total": total,
+	})
 }
 
 func (s *Server) handleNotificationsTest(w http.ResponseWriter, r *http.Request) {

@@ -129,11 +129,11 @@ export async function updateSettings(payload: any) {
   if (!res.ok) throw new Error('更新设置失败')
 }
 
-export async function getNotifications(limit = 20) {
-  const res = await fetch(`/api/notifications?limit=${limit}`)
+export async function getNotifications(page = 1, limit = 20, type = '') {
+  const res = await fetch(`/api/notifications?page=${page}&limit=${limit}&type=${type}`)
   if (!res.ok) throw new Error('网络错误')
   const data = await res.json()
-  return Array.isArray(data) ? data : []
+  return Array.isArray(data) ? { items: data, total: data.length } : data
 }
 
 export async function getSubscriptions(monitorId: number) {

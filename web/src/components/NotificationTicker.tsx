@@ -25,7 +25,7 @@ export const NotificationTicker: React.FC<NotificationTickerProps> = ({ notices,
         bodyStyle={{ padding: '12px 20px' }}
         onClick={onClick}
       >
-        <Space>
+        <Space className="w-full justify-center">
           <IconNotification style={{ fontSize: 20, color: 'var(--color-text-3)' }} />
           <Typography.Text type="secondary">暂无异常通知</Typography.Text>
         </Space>
@@ -50,8 +50,9 @@ export const NotificationTicker: React.FC<NotificationTickerProps> = ({ notices,
       >
         {notices.map((notice) => (
           <div key={notice.id} style={{ padding: '0 16px', height: '100%', display: 'flex', alignItems: 'center' }}>
-             <Space size={12} style={{ width: '100%' }}>
-                <IconNotification style={{ fontSize: 20, color: 'rgb(var(--red-6))' }} />
+            <IconNotification style={{ fontSize: 20, color: 'rgb(var(--red-6))' }} />
+            <div style={{ flex: 1, display: 'flex', justifyContent: 'center' }}>
+              <Space size={12} className="items-center">
                 <Tag color={notice.type === 'status_change' ? 'red' : notice.type === 'ssl_expiry' ? 'orange' : 'blue'} size="small">
                   {notice.type === 'status_change' ? '状态变更' : notice.type === 'ssl_expiry' ? 'SSL过期' : notice.type}
                 </Tag>
@@ -59,12 +60,13 @@ export const NotificationTicker: React.FC<NotificationTickerProps> = ({ notices,
                   {new Date(notice.created_at).toLocaleTimeString()}
                 </Typography.Text>
                 <Typography.Paragraph 
-                    ellipsis={{ rows: 1, showTooltip: true }} 
-                    style={{ margin: 0, flex: 1, color: 'var(--color-text-1)' }}
+                  ellipsis={{ rows: 1, showTooltip: true }} 
+                  style={{ margin: 0, color: 'var(--color-text-1)', textAlign: 'center' }}
                 >
                   <span style={{ fontWeight: 500 }}>[{notice.monitor_name}]</span> {notice.message}
                 </Typography.Paragraph>
-             </Space>
+              </Space>
+            </div>
           </div>
         ))}
       </Carousel>
