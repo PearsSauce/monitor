@@ -298,12 +298,16 @@ func (s *Service) CheckMonitor(id int) error {
 	}
 	duration := time.Since(start)
 
-	_, _ = s.db.Exec(`INSERT INTO monitor_results(monitor_id,online,status_code,response_ms,error)
-		VALUES($1,$2,$3,$4,$5)`, m.ID, online, statusCode, int(duration.Milliseconds()), nullIfEmpty(errStr))
+	if _, err2 := s.db.Exec(`INSERT INTO monitor_results(monitor_id,online,status_code,response_ms,error)
+		VALUES($1,$2,$3,$4,$5)`, m.ID, online, statusCode, int(duration.Milliseconds()), nullIfEmpty(errStr)); err2 != nil {
+		log.Printf("写入监控结果失败 id=%d err=%v", m.ID, err2)
+	}
 	log.Printf("监控结果 name=%s online=%v code=%d 耗时=%dms 错误=%s", m.Name, online, statusCode, int(duration.Milliseconds()), errStr)
 
 	now := time.Now()
-	_, _ = s.db.Exec(`UPDATE monitors SET last_online=$1, last_checked_at=$2 WHERE id=$3`, online, now, m.ID)
+	if _, err2 := s.db.Exec(`UPDATE monitors SET last_online=$1, last_checked_at=$2 WHERE id=$3`, online, now, m.ID); err2 != nil {
+		log.Printf("更新监控状态失败 id=%d err=%v", m.ID, err2)
+	}
 
 	var lastReported sql.NullBool
 	var onStreak int
@@ -317,9 +321,11 @@ func (s *Service) CheckMonitor(id int) error {
 		offStreak++
 		onStreak = 0
 	}
-	_, _ = s.db.Exec(`INSERT INTO monitor_state(monitor_id,last_reported_online,online_streak,offline_streak)
+	if _, err2 := s.db.Exec(`INSERT INTO monitor_state(monitor_id,last_reported_online,online_streak,offline_streak)
 		VALUES($1,$2,$3,$4)
-		ON CONFLICT (monitor_id) DO UPDATE SET online_streak=EXCLUDED.online_streak, offline_streak=EXCLUDED.offline_streak`, m.ID, lastReported.Bool, onStreak, offStreak)
+		ON CONFLICT (monitor_id) DO UPDATE SET online_streak=EXCLUDED.online_streak, offline_streak=EXCLUDED.offline_streak`, m.ID, lastReported.Bool, onStreak, offStreak); err2 != nil {
+		log.Printf("更新监控状态序列失败 id=%d err=%v", m.ID, err2)
+	}
 	// thresholds and cooldowns
 	thresh := m.FlapThreshold
 	if thresh <= 0 {
@@ -487,10 +493,12 @@ func (s *Service) checkSSL(m *model.Monitor) {
 	cert := state.PeerCertificates[0]
 	expires := cert.NotAfter
 	daysLeft := int(time.Until(expires).Hours() / 24)
-	_, _ = s.db.Exec(`INSERT INTO ssl_info(monitor_id,expires_at,issuer,days_left)
+	if _, err2 := s.db.Exec(`INSERT INTO ssl_info(monitor_id,expires_at,issuer,days_left)
 		VALUES($1,$2,$3,$4)
 		ON CONFLICT (monitor_id) DO UPDATE SET expires_at=EXCLUDED.expires_at, issuer=EXCLUDED.issuer, days_left=EXCLUDED.days_left`,
-		m.ID, expires, cert.Issuer.CommonName, daysLeft)
+		m.ID, expires, cert.Issuer.CommonName, daysLeft); err2 != nil {
+		log.Printf("写入SSL信息失败 id=%d err=%v", m.ID, err2)
+	}
 
 	if daysLeft <= s.cfg.AlertBeforeDays {
 		msg := s.buildSSLExpiryEmail(*m, daysLeft, expires)
