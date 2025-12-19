@@ -200,25 +200,25 @@ func (s *Service) CleanupOldResults() {
 }
 
 func (s *Service) runLoopWithStop(monitorID int, interval time.Duration, stop chan struct{}) {
-	// align first tick to interval grid
-	now := time.Now()
-	rem := now.UnixNano() % interval.Nanoseconds()
-	delay := time.Duration(interval.Nanoseconds() - rem)
-	if delay == interval {
-		delay = 0
-	}
-	timer := time.NewTimer(delay)
+	next := time.Now().Truncate(interval).Add(interval)
+	timer := time.NewTimer(time.Until(next))
 	defer timer.Stop()
 	for {
 		select {
 		case <-timer.C:
-			log.Printf("首次对齐触发 id=%d 延迟=%s", monitorID, delay.String())
+			log.Printf("对齐触发 id=%d", monitorID)
 			s.checkOnce(monitorID)
-			t := time.NewTicker(interval)
-			defer t.Stop()
 			for {
+				next = next.Add(interval)
+				d := time.Until(next)
+				if d <= 0 {
+					next = time.Now().Truncate(interval).Add(interval)
+					d = time.Until(next)
+					log.Printf("重新对齐 id=%d", monitorID)
+				}
+				timer.Reset(d)
 				select {
-				case <-t.C:
+				case <-timer.C:
 					log.Printf("触发定时检查 id=%d", monitorID)
 					s.checkOnce(monitorID)
 				case <-stop:

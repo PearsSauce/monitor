@@ -1,25 +1,31 @@
+export const API_BASE = (import.meta as any).env?.VITE_API_BASE_URL ? String((import.meta as any).env.VITE_API_BASE_URL).replace(/\/+$/, '') : ''
+
+function prefix(u: string) {
+  return `${API_BASE}${u}`
+}
+
 export async function getMonitors() {
-  const res = await fetch('/api/monitors')
+  const res = await fetch(prefix('/api/monitors'))
   if (!res.ok) throw new Error('网络错误')
   return res.json()
 }
 
 export async function getHistory(id: number, days: number) {
-  const res = await fetch(`/api/monitors/${id}/history?days=${days}`)
+  const res = await fetch(prefix(`/api/monitors/${id}/history?days=${days}`))
   if (!res.ok) throw new Error('网络错误')
   const data = await res.json()
   return Array.isArray(data) ? data : []
 }
 
 export async function getHistoryByDay(id: number, days: number) {
-  const res = await fetch(`/api/monitors/${id}/history?group=day&days=${days}`)
+  const res = await fetch(prefix(`/api/monitors/${id}/history?group=day&days=${days}`))
   if (!res.ok) throw new Error('网络错误')
   const data = await res.json()
   return Array.isArray(data) ? data : []
 }
 
 export async function getGroups() {
-  const res = await fetch('/api/groups')
+  const res = await fetch(prefix('/api/groups'))
   if (!res.ok) throw new Error('网络错误')
   return res.json()
 }
@@ -48,7 +54,7 @@ function authHeader(): Record<string, string> {
 }
 
 export async function login(password: string) {
-  const res = await fetch('/api/login', {
+  const res = await fetch(prefix('/api/login'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ password })
@@ -60,7 +66,7 @@ export async function login(password: string) {
 
 async function request(url: string, options: RequestInit = {}) {
   const headers = { 'Content-Type': 'application/json', ...authHeader(), ...(options.headers || {}) }
-  const res = await fetch(url, { ...options, headers })
+  const res = await fetch(prefix(url), { ...options, headers })
   if (res.status === 401) {
     setToken('')
     throw new Error('登录已过期，请刷新页面重新登录')
@@ -89,7 +95,7 @@ export async function deleteGroup(id: number) {
 }
 
 export async function getSSL(id: number) {
-  const res = await fetch(`/api/ssl/${id}`)
+  const res = await fetch(prefix(`/api/ssl/${id}`))
   if (res.status === 404) return null
   if (!res.ok) throw new Error('网络错误')
   return res.json()
@@ -108,29 +114,29 @@ export async function deleteMonitor(id: number) {
 }
 
 export async function getSetupState() {
-  const res = await fetch('/api/setup/state')
+  const res = await fetch(prefix('/api/setup/state'))
   if (!res.ok) throw new Error('网络错误')
   return res.json()
 }
 
 export async function postSetup(payload: any) {
-  const res = await fetch('/api/setup', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+  const res = await fetch(prefix('/api/setup'), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
   if (!res.ok) throw new Error('安装失败')
 }
 
 export async function getSettings() {
-  const res = await fetch('/api/settings')
+  const res = await fetch(prefix('/api/settings'))
   if (!res.ok) throw new Error('网络错误')
   return res.json()
 }
 
 export async function updateSettings(payload: any) {
-  const res = await fetch('/api/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json', ...authHeader() }, body: JSON.stringify(payload) })
+  const res = await fetch(prefix('/api/settings'), { method: 'PUT', headers: { 'Content-Type': 'application/json', ...authHeader() }, body: JSON.stringify(payload) })
   if (!res.ok) throw new Error('更新设置失败')
 }
 
 export async function getNotifications(page = 1, limit = 20, type = '') {
-  const res = await fetch(`/api/notifications?page=${page}&limit=${limit}&type=${type}`)
+  const res = await fetch(prefix(`/api/notifications?page=${page}&limit=${limit}&type=${type}`))
   if (!res.ok) throw new Error('网络错误')
   const data = await res.json()
   return Array.isArray(data) ? { items: data, total: data.length } : data
@@ -149,7 +155,7 @@ export async function deleteSubscription(id: number) {
 }
 
 export async function publicSubscribe(monitorId: number, email: string, events: string[]) {
-  const res = await fetch('/api/public/subscribe', {
+  const res = await fetch(prefix('/api/public/subscribe'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ monitor_id: monitorId, email, notify_events: events })
@@ -170,7 +176,7 @@ export async function deleteSubscriptionsForMonitor(monitorId: number) {
 
 
 export async function getLatestResult(id: number) {
-  const res = await fetch(`/api/monitors/${id}/latest`)
+  const res = await fetch(prefix(`/api/monitors/${id}/latest`))
   if (res.status === 404) return null
   if (!res.ok) throw new Error('网络错误')
   return res.json()

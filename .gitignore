@@ -28,6 +28,9 @@ web/dist/
 web/build/
 web/.env.local
 web/.env.*.local
+web/.env
+web/.env.*
+!web/.env.production.example
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
@@ -35,3 +38,7 @@ pnpm-debug.log*
 
 # Misc
 .env
+server
+monitor-server
+server.exe
+monitor-server.exe

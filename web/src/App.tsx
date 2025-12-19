@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState, useRef } from 'react'
 import { Button, Card, Divider, Drawer, Form, Grid, Input, InputNumber, Message, Modal, Select, Space, Switch, Table, Tag, Typography, Layout, Menu, Breadcrumb, Avatar, Dropdown, Checkbox } from '@arco-design/web-react'
 import { IconMoonFill, IconSun, IconArrowLeft, IconDesktop, IconCheckCircle, IconCloseCircle, IconClockCircle, IconHome, IconNotification, IconUser, IconLaunch } from '@arco-design/web-react/icon'
-import { createGroup, createMonitor, deleteGroup, getGroups, getHistory, getHistoryByDay, getMonitors, getSSL, getSetupState, postSetup, updateGroup, updateMonitor, getSettings, updateSettings, getNotifications, getLatestResult, login, getToken } from './api'
+import { createGroup, createMonitor, deleteGroup, getGroups, getHistory, getHistoryByDay, getMonitors, getSSL, getSetupState, postSetup, updateGroup, updateMonitor, getSettings, updateSettings, getNotifications, getLatestResult, login, getToken, API_BASE } from './api'
 // 移除趋势与分布图组件
 import { NotificationTicker } from './components/NotificationTicker'
 import useTheme from './useTheme'
@@ -163,7 +163,7 @@ export default function App() {
     }).catch(()=>{})
   }, [])
   useEffect(() => {
-    const es = new EventSource('/api/events')
+    const es = new EventSource(`${API_BASE}/api/events`)
     es.onmessage = (e) => {
       try {
         const ev = JSON.parse(e.data)
