@@ -42,3 +42,4 @@ server
 monitor-server
 server.exe
 monitor-server.exe
+build/
