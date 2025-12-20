@@ -1062,6 +1062,7 @@ func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("X-Accel-Buffering", "no")
 	fl, ok := w.(http.Flusher)
 	if !ok {
 		w.WriteHeader(500)
@@ -1074,6 +1075,8 @@ func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {
 	s.clients[id] = ch
 	s.clientsMu.Unlock()
 	ctx := r.Context()
+	ticker := time.NewTicker(15 * time.Second)
+	defer ticker.Stop()
 	for {
 		select {
 		case <-ctx.Done():
@@ -1082,6 +1085,9 @@ func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {
 			close(ch)
 			s.clientsMu.Unlock()
 			return
+		case <-ticker.C:
+			w.Write([]byte(": ping\n\n"))
+			fl.Flush()
 		case u := <-ch:
 			b, _ := json.Marshal(u)
 			w.Write([]byte("data: "))

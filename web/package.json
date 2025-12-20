@@ -5,8 +5,12 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:host": "vite --host",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "start": "vite preview --host",
+    "start:dev": "npm run dev",
+    "start:prod": "npm run build && npm run start"
   },
   "dependencies": {
     "@arco-design/web-react": "^2.63.0",

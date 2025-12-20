@@ -94,6 +94,8 @@ export default function App() {
   const [subTarget, setSubTarget] = useState<Monitor | null>(null)
   
   const containerRef = useRef<HTMLDivElement>(null)
+  const sseBufferRef = useRef<{ latest: Record<number, number>; list: Record<number, { online: boolean; checked_at: string }>; notices: NotificationItem[] }>({ latest: {}, list: {}, notices: [] })
+  const sseTimerRef = useRef<number | null>(null)
 
   useGSAP(() => {
     const tl = gsap.timeline()
@@ -167,23 +169,57 @@ export default function App() {
     es.onmessage = (e) => {
       try {
         const ev = JSON.parse(e.data)
-        setList(prev => prev.map(m => m.id === ev.MonitorID ? { ...m, last_online: ev.Online, last_checked_at: new Date(ev.CheckedAt).toISOString() } : m))
-        setLatest(prev => ({ ...prev, [ev.MonitorID]: ev.ResponseMs }))
+        const b = sseBufferRef.current
+        b.latest[ev.MonitorID] = ev.ResponseMs
+        b.list[ev.MonitorID] = { online: !!ev.Online, checked_at: new Date(ev.CheckedAt).toISOString() }
         if (ev.EventType === 'status_change' || ev.EventType === 'ssl_expiry') {
           const name = ev.MonitorName || (list.find(m=>m.id===ev.MonitorID)?.name) || ''
-          const it: NotificationItem = {
+          b.notices.unshift({
             id: Date.now(),
             monitor_id: ev.MonitorID,
             created_at: new Date(ev.CheckedAt).toISOString(),
             type: ev.EventType,
             message: ev.Message || '',
             monitor_name: name
-          }
-          setNotices(prev => [it, ...prev].slice(0, 50))
+          })
+          if (b.notices.length > 50) b.notices.length = 50
+        }
+        if (!sseTimerRef.current) {
+          sseTimerRef.current = window.setTimeout(() => {
+            const buf = sseBufferRef.current
+            if (Object.keys(buf.list).length) {
+              setList(prev => prev.map(m => {
+                const u = buf.list[m.id]
+                return u ? { ...m, last_online: u.online, last_checked_at: u.checked_at } : m
+              }))
+            }
+            if (Object.keys(buf.latest).length) {
+              setLatest(prev => {
+                const next = { ...prev }
+                for (const k of Object.keys(buf.latest)) next[Number(k)] = buf.latest[Number(k)]
+                return next
+              })
+            }
+            if (buf.notices.length) {
+              setNotices(prev => [...buf.notices, ...prev].slice(0, 50))
+            }
+            sseBufferRef.current = { latest: {}, list: {}, notices: [] }
+            if (sseTimerRef.current) {
+              window.clearTimeout(sseTimerRef.current)
+              sseTimerRef.current = null
+            }
+          }, 1000)
         }
       } catch {}
     }
-    return () => { es.close() }
+    return () => {
+      es.close()
+      if (sseTimerRef.current) {
+        window.clearTimeout(sseTimerRef.current)
+        sseTimerRef.current = null
+      }
+      sseBufferRef.current = { latest: {}, list: {}, notices: [] }
+    }
   }, [])
 
   const filtered = useMemo(() => {
