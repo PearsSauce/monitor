@@ -31,10 +31,8 @@ export default function Dashboard() {
   const [noticeTotal, setNoticeTotal] = useState(0)
   const [siteName, setSiteName] = useState('服务监控面板')
   const [subtitle, setSubtitle] = useState('')
-  const [showSubscribe, setShowSubscribe] = useState(false)
-  const [subTarget, setSubTarget] = useState<Monitor | null>(null)
+  const [showUnifiedSubscribe, setShowUnifiedSubscribe] = useState(false)
   const [detailMonitor, setDetailMonitor] = useState<Monitor | null>(null)
-  
   const sseBufferRef = useRef<{ latest: Record<number, number>; list: Record<number, { online: boolean; checked_at: string }>; notices: NotificationItem[] }>({ latest: {}, list: {}, notices: [] })
   const sseTimerRef = useRef<NodeJS.Timeout | null>(null)
   const listRef = useRef(list)
@@ -247,7 +245,12 @@ export default function Dashboard() {
 
           <Card>
             <CardHeader>
-              <CardTitle>监控列表</CardTitle>
+              <div className="flex items-center justify-between">
+                <CardTitle>监控列表</CardTitle>
+                <div className="flex items-center gap-2">
+                  <Button variant="outline" onClick={() => setShowUnifiedSubscribe(true)}>统一订阅</Button>
+                </div>
+              </div>
             </CardHeader>
             <CardContent>
               <MonitorList 
@@ -257,7 +260,6 @@ export default function Dashboard() {
                 sslMap={sslMap} 
                 loading={loading}
                 onDetail={(m) => setDetailMonitor(m)}
-                onSubscribe={(m) => { setSubTarget(m); setShowSubscribe(true); }} 
               />
             </CardContent>
           </Card>
@@ -270,10 +272,11 @@ export default function Dashboard() {
         onClose={() => setDetailMonitor(null)} 
       />
 
-      <SubscribeModal 
-        visible={showSubscribe} 
-        onClose={() => setShowSubscribe(false)} 
-        monitor={subTarget} 
+      <SubscribeModal
+        visible={showUnifiedSubscribe}
+        onClose={() => setShowUnifiedSubscribe(false)}
+        monitor={null}
+        monitors={list}
       />
     </div>
   )

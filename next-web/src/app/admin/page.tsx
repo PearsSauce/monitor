@@ -66,6 +66,9 @@ export default function AdminPage() {
   const [list, setList] = useState<Monitor[]>([])
   const [groups, setGroups] = useState<Group[]>([])
   const [subsAll, setSubsAll] = useState<any[]>([])
+  const [subFilterMonitorId, setSubFilterMonitorId] = useState<string>('') // 空值表示占位（未选择）
+  const [subFilterEvent, setSubFilterEvent] = useState<string>('') // 空值表示占位（未选择）
+  const [subFilterEmail, setSubFilterEmail] = useState<string>('')
   const [showMonitorForm, setShowMonitorForm] = useState(false)
   const [editingMonitor, setEditingMonitor] = useState<Monitor | null>(null)
   const [monitorToDelete, setMonitorToDelete] = useState<Monitor | null>(null)
@@ -339,6 +342,35 @@ export default function AdminPage() {
                   <CardTitle>订阅列表</CardTitle>
                 </CardHeader>
                 <CardContent>
+                  <div className="flex flex-wrap items-center gap-3 mb-3">
+                    <div className="w-[220px]">
+                      <Select value={subFilterMonitorId} onValueChange={setSubFilterMonitorId}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="筛选站点" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="__ALL_MONITORS__">全部站点</SelectItem>
+                          {list.map(m => <SelectItem key={m.id} value={String(m.id)}>{m.name}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="w-[220px]">
+                      <Select value={subFilterEvent} onValueChange={setSubFilterEvent}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="筛选事件" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="__ALL_EVENTS__">全部事件</SelectItem>
+                          <SelectItem value="online">在线</SelectItem>
+                          <SelectItem value="offline">离线</SelectItem>
+                          <SelectItem value="ssl_expiry">证书到期</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="w-[240px]">
+                      <Input placeholder="筛选邮箱" value={subFilterEmail} onChange={(e) => setSubFilterEmail(e.target.value)} />
+                    </div>
+                  </div>
                   <div className="rounded-md border">
                     <Table>
                       <TableHeader>
@@ -352,7 +384,23 @@ export default function AdminPage() {
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {subsAll.map((sub) => (
+                        {(subsAll.filter((sub) => {
+                          const monitorOk =
+                            subFilterMonitorId === '' || subFilterMonitorId === '__ALL_MONITORS__'
+                              ? true
+                              : String(sub.monitor_id) === subFilterMonitorId
+                          const emailOk = subFilterEmail
+                            ? String(sub.email || '').toLowerCase().includes(subFilterEmail.toLowerCase())
+                            : true
+                          const eventOk =
+                            subFilterEvent === '' || subFilterEvent === '__ALL_EVENTS__'
+                              ? true
+                              : String(sub.notify_events || '')
+                                  .split(',')
+                                  .map((x: string) => x.trim())
+                                  .includes(subFilterEvent)
+                          return monitorOk && emailOk && eventOk
+                        })).map((sub) => (
                           <TableRow key={sub.id}>
                             <TableCell>{sub.monitor_name}</TableCell>
                             <TableCell>{sub.email}</TableCell>

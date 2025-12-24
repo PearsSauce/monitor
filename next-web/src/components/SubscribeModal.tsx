@@ -6,57 +6,126 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Label } from '@/components/ui/label'
+import { ScrollArea } from '@/components/ui/scroll-area'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import * as z from 'zod'
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form'
 import { publicSubscribe } from '@/lib/api'
 import { toast } from 'sonner'
+import { useState } from 'react'
 
 const formSchema = z.object({
-  email: z.string().email({ message: "请输入有效的邮箱地址" }),
-  events: z.array(z.string()).refine((value) => value.length > 0, {
-    message: "请至少选择一种通知类型",
-  }),
+  email: z.string().email({ message: "请输入有效的邮箱地址" })
 })
 
 interface SubscribeModalProps {
   visible: boolean
   onClose: () => void
   monitor: Monitor | null
+  monitors?: Monitor[]
 }
 
-export function SubscribeModal({ visible, onClose, monitor }: SubscribeModalProps) {
+export function SubscribeModal({ visible, onClose, monitor, monitors = [] }: SubscribeModalProps) {
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
       email: "",
-      events: ["offline", "online", "ssl_expiry"],
     },
   })
+  const [selected, setSelected] = useState<number[]>([])
+  const [selectedEvents, setSelectedEvents] = useState<Record<number, Set<string>>>({})
 
   const onSubmit = async (values: z.infer<typeof formSchema>) => {
-    if (!monitor) return
     try {
-      await publicSubscribe(monitor.id, values.email, values.events)
+      if (monitor) {
+        const evs = Array.from(selectedEvents[monitor.id] ?? new Set<string>(["offline","online","ssl_expiry"]))
+        await publicSubscribe(monitor.id, values.email, evs)
+      } else {
+        if (!selected.length) {
+          toast.error("请至少选择一个站点")
+          return
+        }
+        for (const id of selected) {
+          const evs = Array.from(selectedEvents[id] ?? new Set<string>())
+          if (!evs.length) {
+            toast.error("请为所选站点至少选择一种通知类型")
+            return
+          }
+          await publicSubscribe(id, values.email, evs)
+        }
+      }
       toast.success("验证邮件已发送，请查收并完成验证")
       onClose()
-    } catch (e: any) {
-      toast.error(e.message || "订阅失败")
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "订阅失败"
+      toast.error(msg)
     }
   }
 
-  if (!monitor) return null
+  if (!monitor && !monitors.length) return null
 
   return (
     <Dialog open={visible} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="sm:max-w-[425px]" aria-describedby="subscribe-desc">
         <DialogHeader>
-          <DialogTitle>订阅 · {monitor.name}</DialogTitle>
+          <DialogTitle>{monitor ? `订阅 · ${monitor.name}` : '统一订阅'}</DialogTitle>
         </DialogHeader>
         <p id="subscribe-desc" className="sr-only">订阅该站点的通知类型并验证邮箱</p>
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+            {!monitor && monitors.length > 0 && (
+              <FormItem>
+                <FormLabel>选择站点</FormLabel>
+                <ScrollArea className="h-[180px] rounded-md border p-3">
+                  <div className="space-y-2">
+                    {monitors.map((m) => {
+                      const checked = selected.includes(m.id)
+                      return (
+                        <div key={m.id} className="flex items-start justify-between">
+                          <div className="flex items-start space-x-3">
+                            <Checkbox
+                              checked={checked}
+                              onCheckedChange={(v) => {
+                                if (v) setSelected((prev) => [...prev, m.id])
+                                else setSelected((prev) => prev.filter((x) => x !== m.id))
+                              }}
+                            />
+                            <Label className="font-normal">{m.name}</Label>
+                          </div>
+                          <div className="flex items-center space-x-3">
+                            {[
+                              { id: "offline", label: "离线" },
+                              { id: "online", label: "恢复" },
+                              { id: "ssl_expiry", label: "证书到期" },
+                            ].map((item) => {
+                              const set = selectedEvents[m.id] ?? new Set<string>()
+                              const isChecked = set.has(item.id)
+                              return (
+                                <div key={item.id} className="flex items-center space-x-2">
+                                  <Checkbox
+                                    checked={isChecked}
+                                    onCheckedChange={(v) => {
+                                      setSelectedEvents((prev) => {
+                                        const cur = new Set(prev[m.id] ?? new Set<string>())
+                                        if (v) cur.add(item.id)
+                                        else cur.delete(item.id)
+                                        return { ...prev, [m.id]: cur }
+                                      })
+                                    }}
+                                  />
+                                  <Label className="font-normal text-sm">{item.label}</Label>
+                                </div>
+                              )
+                            })}
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </ScrollArea>
+              </FormItem>
+            )}
             <FormField
               control={form.control}
               name="email"
@@ -66,57 +135,6 @@ export function SubscribeModal({ visible, onClose, monitor }: SubscribeModalProp
                   <FormControl>
                     <Input placeholder="user@example.com" {...field} />
                   </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={form.control}
-              name="events"
-              render={() => (
-                <FormItem>
-                  <div className="mb-4">
-                    <FormLabel className="text-base">通知类型</FormLabel>
-                  </div>
-                  <div className="flex flex-col space-y-2">
-                    {[
-                      { id: "offline", label: "离线" },
-                      { id: "online", label: "恢复" },
-                      { id: "ssl_expiry", label: "证书到期" },
-                    ].map((item) => (
-                      <FormField
-                        key={item.id}
-                        control={form.control}
-                        name="events"
-                        render={({ field }) => {
-                          return (
-                            <FormItem
-                              key={item.id}
-                              className="flex flex-row items-start space-x-3 space-y-0"
-                            >
-                              <FormControl>
-                                <Checkbox
-                                  checked={field.value?.includes(item.id)}
-                                  onCheckedChange={(checked) => {
-                                    return checked
-                                      ? field.onChange([...field.value, item.id])
-                                      : field.onChange(
-                                          field.value?.filter(
-                                            (value) => value !== item.id
-                                          )
-                                        )
-                                  }}
-                                />
-                              </FormControl>
-                              <FormLabel className="font-normal">
-                                {item.label}
-                              </FormLabel>
-                            </FormItem>
-                          )
-                        }}
-                      />
-                    ))}
-                  </div>
                   <FormMessage />
                 </FormItem>
               )}

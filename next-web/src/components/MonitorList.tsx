@@ -17,10 +17,9 @@ interface MonitorListProps {
   sslMap: Record<number, SSLInfo>
   loading?: boolean
   onDetail: (monitor: Monitor) => void
-  onSubscribe: (monitor: Monitor) => void
 }
 
-export function MonitorList({ monitors, groups, latest, sslMap, loading, onDetail, onSubscribe }: MonitorListProps) {
+export function MonitorList({ monitors, groups, latest, sslMap, loading, onDetail }: MonitorListProps) {
   return (
     <div className="rounded-md border bg-card">
       <Table>
@@ -119,7 +118,6 @@ export function MonitorList({ monitors, groups, latest, sslMap, loading, onDetai
                 <TableCell>
                   <div className="flex space-x-2">
                     <Button variant="outline" size="sm" onClick={() => onDetail(r)}>详情</Button>
-                    <Button variant="outline" size="sm" onClick={() => onSubscribe(r)}>订阅</Button>
                   </div>
                 </TableCell>
               </TableRow>
