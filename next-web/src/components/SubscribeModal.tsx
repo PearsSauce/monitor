@@ -50,10 +50,11 @@ export function SubscribeModal({ visible, onClose, monitor }: SubscribeModalProp
 
   return (
     <Dialog open={visible} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="sm:max-w-[425px]">
+      <DialogContent className="sm:max-w-[425px]" aria-describedby="subscribe-desc">
         <DialogHeader>
           <DialogTitle>订阅 · {monitor.name}</DialogTitle>
         </DialogHeader>
+        <p id="subscribe-desc" className="sr-only">订阅该站点的通知类型并验证邮箱</p>
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
             <FormField

@@ -5,10 +5,20 @@ import { useRouter } from 'next/navigation'
 import { getToken, setToken, getMonitors, getGroups, deleteMonitor, getSettings, updateSettings, getAllSubscriptions, deleteSubscription } from '@/lib/api'
 import { Monitor, Group } from '@/types'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { Switch } from '@/components/ui/switch'
 import { Input } from '@/components/ui/input'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -58,6 +68,7 @@ export default function AdminPage() {
   const [subsAll, setSubsAll] = useState<any[]>([])
   const [showMonitorForm, setShowMonitorForm] = useState(false)
   const [editingMonitor, setEditingMonitor] = useState<Monitor | null>(null)
+  const [monitorToDelete, setMonitorToDelete] = useState<Monitor | null>(null)
   const [showGroupManager, setShowGroupManager] = useState(false)
   
   // Test notification state
@@ -206,6 +217,18 @@ export default function AdminPage() {
     }
   }
 
+  const confirmDeleteMonitor = async () => {
+    if (!monitorToDelete) return
+    try {
+      await deleteMonitor(monitorToDelete.id)
+      toast.success('监控项已删除')
+      fetchData()
+      setMonitorToDelete(null)
+    } catch (e: any) {
+      toast.error(e.message)
+    }
+  }
+
   if (!mounted) return null
 
   return (
@@ -295,13 +318,7 @@ export default function AdminPage() {
                                   <Button size="sm" variant="outline" onClick={() => { setEditingMonitor(r); setShowMonitorForm(true) }}>
                                     <Edit className="h-4 w-4" />
                                   </Button>
-                                  <Button size="sm" variant="destructive" onClick={async () => {
-                                    if (confirm('确定删除吗？')) {
-                                      await deleteMonitor(r.id)
-                                      toast.success('已删除')
-                                      fetchData()
-                                    }
-                                  }}>
+                                  <Button size="sm" variant="destructive" onClick={() => setMonitorToDelete(r)}>
                                     <Trash2 className="h-4 w-4" />
                                   </Button>
                                 </div>
@@ -689,6 +706,21 @@ export default function AdminPage() {
         groups={groups} 
         onOk={() => { fetchData() }} 
       />
+
+      <AlertDialog open={!!monitorToDelete} onOpenChange={(open) => !open && setMonitorToDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>确定删除监控项 "{monitorToDelete?.name}" 吗？</AlertDialogTitle>
+            <AlertDialogDescription>
+              此操作无法撤销。该监控项的历史数据将被永久删除。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>取消</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDeleteMonitor} className="bg-red-600 hover:bg-red-700">确认删除</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

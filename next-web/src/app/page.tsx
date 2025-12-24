@@ -5,6 +5,7 @@ import { Monitor, Group, SSLInfo, NotificationItem } from '@/types'
 import { getMonitors, getGroups, getSSL, getNotifications, getLatestResult, getSetupState, getSettings, API_BASE, getToken } from '@/lib/api'
 import { NotificationTicker } from '@/components/NotificationTicker'
 import { MonitorList } from '@/components/MonitorList'
+import { MonitorDetail } from '@/components/MonitorDetail'
 import { SubscribeModal } from '@/components/SubscribeModal'
 import { AnimatedCounter } from '@/components/AnimatedCounter'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -32,9 +33,15 @@ export default function Dashboard() {
   const [subtitle, setSubtitle] = useState('')
   const [showSubscribe, setShowSubscribe] = useState(false)
   const [subTarget, setSubTarget] = useState<Monitor | null>(null)
+  const [detailMonitor, setDetailMonitor] = useState<Monitor | null>(null)
   
   const sseBufferRef = useRef<{ latest: Record<number, number>; list: Record<number, { online: boolean; checked_at: string }>; notices: NotificationItem[] }>({ latest: {}, list: {}, notices: [] })
   const sseTimerRef = useRef<NodeJS.Timeout | null>(null)
+  const listRef = useRef(list)
+
+  useEffect(() => {
+    listRef.current = list
+  }, [list])
 
   const { theme, setTheme, resolvedTheme } = useTheme()
   const [mounted, setMounted] = useState(false)
@@ -99,7 +106,7 @@ export default function Dashboard() {
         b.list[ev.MonitorID] = { online: !!ev.Online, checked_at: new Date(ev.CheckedAt).toISOString() }
         
         if (ev.EventType === 'status_change' || ev.EventType === 'ssl_expiry') {
-          const name = ev.MonitorName || (list.find(m=>m.id===ev.MonitorID)?.name) || ''
+          const name = ev.MonitorName || (listRef.current.find(m=>m.id===ev.MonitorID)?.name) || ''
           b.notices.unshift({
             id: Date.now(),
             monitor_id: ev.MonitorID,
@@ -137,13 +144,14 @@ export default function Dashboard() {
       } catch {}
     }
     return () => {
+      console.log('SSE Cleanup')
       es.close()
       if (sseTimerRef.current) {
         clearTimeout(sseTimerRef.current)
         sseTimerRef.current = null
       }
     }
-  }, [list])
+  }, [])
 
   const totalCount = list.length
   const onlineCount = list.filter(i => !!i.last_online).length
@@ -177,7 +185,7 @@ export default function Dashboard() {
                 </>
               )}
             </div>
-            <Link href={getToken() ? '/admin' : '/login'}>
+            <Link href={mounted && getToken() ? '/admin' : '/login'}>
               <Button variant="ghost" size="icon">
                 <User className="h-5 w-5" />
               </Button>
@@ -248,13 +256,19 @@ export default function Dashboard() {
                 latest={latest} 
                 sslMap={sslMap} 
                 loading={loading}
-                onDetail={() => {}} // TODO
+                onDetail={(m) => setDetailMonitor(m)}
                 onSubscribe={(m) => { setSubTarget(m); setShowSubscribe(true); }} 
               />
             </CardContent>
           </Card>
         </div>
       </main>
+
+      <MonitorDetail 
+        monitor={detailMonitor} 
+        open={!!detailMonitor} 
+        onClose={() => setDetailMonitor(null)} 
+      />
 
       <SubscribeModal 
         visible={showSubscribe} 

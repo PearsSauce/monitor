@@ -107,10 +107,11 @@ export function MonitorForm({ visible, onClose, editing, groups, onOk }: Monitor
 
   return (
     <Dialog open={visible} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto" aria-describedby="monitor-form-desc">
         <DialogHeader>
           <DialogTitle>{editing ? '编辑监控' : '新建监控'}</DialogTitle>
         </DialogHeader>
+        <p id="monitor-form-desc" className="sr-only">填写或编辑监控站点的基本信息和检测参数</p>
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
             <FormField

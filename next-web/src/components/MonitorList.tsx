@@ -5,8 +5,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { ExternalLink } from 'lucide-react'
 import { StatusBar } from './StatusBar'
+import { SvgIcon } from './SvgIcon'
 
 interface MonitorListProps {
   monitors: Monitor[]
@@ -58,9 +60,18 @@ export function MonitorList({ monitors, groups, latest, sslMap, loading, onDetai
               <TableRow key={r.id}>
                 <TableCell className="font-medium">{r.name}</TableCell>
                 <TableCell className="text-center">
-                  <Badge variant={r.last_online ? "default" : "destructive"} className={r.last_online ? "bg-green-600 hover:bg-green-700" : ""}>
-                    {r.last_online ? '在线' : '离线'}
-                  </Badge>
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger>
+                        <Badge variant={r.last_online ? "default" : "destructive"} className={r.last_online ? "bg-green-600 hover:bg-green-700" : ""}>
+                          {r.last_online ? '在线' : '离线'}
+                        </Badge>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>{r.last_online ? '服务正常运行中' : '服务当前不可用'}</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
                 </TableCell>
                 <TableCell>
                   <div className="flex items-center space-x-2">
@@ -73,12 +84,26 @@ export function MonitorList({ monitors, groups, latest, sslMap, loading, onDetai
                 <TableCell className="text-center">
                   {g ? (
                     <Badge variant="outline" style={{ backgroundColor: g.color, color: g.color ? '#fff' : undefined, borderColor: g.color || undefined }}>
-                      {g.icon ? `${g.icon} ` : ''}{g.name}
+                      <span className="inline-flex items-center gap-1">
+                        {g.icon && g.icon.toLowerCase().includes('<svg') ? <SvgIcon html={g.icon} size={16} /> : (g.icon ? <span>{g.icon}</span> : null)}
+                        <span>{g.name}</span>
+                      </span>
                     </Badge>
                   ) : '-'}
                 </TableCell>
                 <TableCell className="text-center">
-                  {typeof latest[r.id] === 'number' ? `${latest[r.id]} ms` : '-'}
+                  {typeof latest[r.id] === 'number' ? (
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span className="cursor-default">{latest[r.id]} ms</span>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>实时响应时间</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  ) : '-'}
                 </TableCell>
                 <TableCell className="text-center">
                   <div className="flex justify-center">

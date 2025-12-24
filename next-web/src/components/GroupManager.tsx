@@ -4,6 +4,16 @@ import { useState, useEffect } from 'react'
 import { Group } from '@/types'
 import { createGroup, updateGroup, deleteGroup } from '@/lib/api'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
@@ -12,7 +22,7 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import * as z from 'zod'
 import { toast } from 'sonner'
-import { Separator } from '@/components/ui/separator' // Need to install separator? I'll use div or border for now or install it. I'll just use div border.
+import { SvgIcon } from './SvgIcon'
 
 const formSchema = z.object({
   name: z.string().min(1, "名称不能为空"),
@@ -29,6 +39,7 @@ interface GroupManagerProps {
 
 export function GroupManager({ visible, onClose, groups, onOk }: GroupManagerProps) {
   const [editing, setEditing] = useState<Group | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<Group | null>(null)
   
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -68,12 +79,17 @@ export function GroupManager({ visible, onClose, groups, onOk }: GroupManagerPro
     }
   }
 
-  const remove = async (g: Group) => {
-    if (!confirm('确定删除该分组吗？')) return
+  const remove = (g: Group) => {
+    setDeleteTarget(g)
+  }
+
+  const confirmDelete = async () => {
+    if (!deleteTarget) return
     try {
-      await deleteGroup(g.id)
+      await deleteGroup(deleteTarget.id)
       toast.success('分组已删除')
       onOk()
+      setDeleteTarget(null)
     } catch (e: any) {
       toast.error(e.message)
     }
@@ -86,10 +102,11 @@ export function GroupManager({ visible, onClose, groups, onOk }: GroupManagerPro
         setEditing(null)
       }
     }}>
-      <DialogContent className="sm:max-w-[800px]">
+      <DialogContent className="sm:max-w-[800px]" aria-describedby="group-manager-desc">
         <DialogHeader>
           <DialogTitle>分组管理</DialogTitle>
         </DialogHeader>
+        <p id="group-manager-desc" className="sr-only">管理监控分组的名称、图标与颜色</p>
         <div className="space-y-6">
           <div className="border rounded-md">
             <Table>
@@ -105,7 +122,11 @@ export function GroupManager({ visible, onClose, groups, onOk }: GroupManagerPro
                 {groups.map((g) => (
                   <TableRow key={g.id}>
                     <TableCell>{g.name}</TableCell>
-                    <TableCell>{g.icon}</TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        {g.icon && g.icon.toLowerCase().includes('<svg') ? <SvgIcon html={g.icon} size={16} /> : (g.icon ? <span>{g.icon}</span> : <span>-</span>)}
+                      </div>
+                    </TableCell>
                     <TableCell>
                       <span className="px-2 py-0.5 rounded text-white text-xs" style={{ backgroundColor: g.color || '#ccc' }}>
                         {g.color || '-'}
@@ -145,10 +166,16 @@ export function GroupManager({ visible, onClose, groups, onOk }: GroupManagerPro
                   name="icon"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>图标</FormLabel>
+                      <FormLabel>图标（支持粘贴 SVG 代码，统一渲染 16px）</FormLabel>
                       <FormControl>
-                        <Input placeholder="例如：🔵" {...field} />
+                        <Input placeholder="例如：🔵 或 <svg>...</svg>" {...field} />
                       </FormControl>
+                      {field.value ? (
+                        <div className="mt-2">
+                          <span className="text-xs text-muted-foreground mr-2">预览：</span>
+                          {field.value.toLowerCase().includes('<svg') ? <SvgIcon html={field.value} size={16} /> : <span>{field.value}</span>}
+                        </div>
+                      ) : null}
                       <FormMessage />
                     </FormItem>
                   )}
@@ -175,6 +202,21 @@ export function GroupManager({ visible, onClose, groups, onOk }: GroupManagerPro
           </div>
         </div>
       </DialogContent>
+
+      <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>确定删除分组 "{deleteTarget?.name}" 吗？</AlertDialogTitle>
+            <AlertDialogDescription>
+              此操作无法撤销。该分组下的监控项将失去分组信息，但不会被删除。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>取消</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDelete} className="bg-red-600 hover:bg-red-700">确认删除</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Dialog>
   )
 }
