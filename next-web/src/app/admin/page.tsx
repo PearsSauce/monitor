@@ -342,8 +342,8 @@ export default function AdminPage() {
                   <CardTitle>订阅列表</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="flex flex-wrap items-center gap-3 mb-3">
-                    <div className="w-[220px]">
+                  <div className="flex flex-col sm:flex-row flex-wrap items-center gap-4 mb-6">
+                    <div className="w-full sm:w-[200px]">
                       <Select value={subFilterMonitorId} onValueChange={setSubFilterMonitorId}>
                         <SelectTrigger>
                           <SelectValue placeholder="筛选站点" />
@@ -354,7 +354,7 @@ export default function AdminPage() {
                         </SelectContent>
                       </Select>
                     </div>
-                    <div className="w-[220px]">
+                    <div className="w-full sm:w-[200px]">
                       <Select value={subFilterEvent} onValueChange={setSubFilterEvent}>
                         <SelectTrigger>
                           <SelectValue placeholder="筛选事件" />
@@ -367,7 +367,7 @@ export default function AdminPage() {
                         </SelectContent>
                       </Select>
                     </div>
-                    <div className="w-[240px]">
+                    <div className="w-full sm:w-[240px]">
                       <Input placeholder="筛选邮箱" value={subFilterEmail} onChange={(e) => setSubFilterEmail(e.target.value)} />
                     </div>
                   </div>

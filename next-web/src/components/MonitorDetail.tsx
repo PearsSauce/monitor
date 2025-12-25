@@ -5,9 +5,7 @@ import { Monitor, SSLInfo } from '@/types'
 import { getHistory, getSSL } from '@/lib/api'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import { Badge } from '@/components/ui/badge'
-import { ScrollArea } from '@/components/ui/scroll-area'
-import { Skeleton } from '@/components/ui/skeleton'
-import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, TooltipProps } from 'recharts'
+import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
 import { ExternalLink, Clock, Globe, ShieldCheck, ShieldAlert, Activity } from 'lucide-react'
 
 interface MonitorDetailProps {
@@ -16,7 +14,83 @@ interface MonitorDetailProps {
   onClose: () => void
 }
 
-const CustomTooltip = ({ active, payload, label }: any) => {
+interface ApiHistoryItem {
+  created_at?: string
+  checked_at?: string
+  success?: boolean
+  online?: boolean
+  response_ms?: number
+}
+
+interface AggPoint {
+  ts: number
+  time: string
+  fullTime: string
+  ms: number | null
+  success: boolean
+  p95?: number
+  p99?: number
+  min?: number
+  max?: number
+  count?: number
+  failures?: number
+}
+
+function percentile(values: number[], p: number): number | null {
+  if (!values.length) return null
+  const sorted = [...values].sort((a, b) => a - b)
+  const idx = Math.min(sorted.length - 1, Math.max(0, Math.ceil((p / 100) * sorted.length) - 1))
+  return sorted[idx]
+}
+
+interface RawPoint {
+  ts: number
+  time: string
+  fullTime: string
+  ms: number | null
+  success: boolean
+}
+
+function aggregateHistory(items: RawPoint[], intervalMinutes = 5): AggPoint[] {
+  const intervalMs = intervalMinutes * 60 * 1000
+  const buckets: Record<number, { times: number[]; successes: number[]; count: number; failures: number }> = {}
+  for (const it of items) {
+    const key = Math.floor(it.ts / intervalMs) * intervalMs
+    if (!buckets[key]) buckets[key] = { times: [], successes: [], count: 0, failures: 0 }
+    buckets[key].count += 1
+    buckets[key].times.push(it.ts)
+    if (typeof it.ms === 'number') buckets[key].successes.push(it.ms)
+    else buckets[key].failures += 1
+  }
+  const result: AggPoint[] = Object.keys(buckets)
+    .map(k => Number(k))
+    .sort((a, b) => a - b)
+    .map(ts => {
+      const b = buckets[ts]
+      const avg = b.successes.length ? Math.round(b.successes.reduce((s, v) => s + v, 0) / b.successes.length) : null
+      const p95 = percentile(b.successes, 95)
+      const p99 = percentile(b.successes, 99)
+      const min = b.successes.length ? Math.min(...b.successes) : null
+      const max = b.successes.length ? Math.max(...b.successes) : null
+      const d = new Date(ts)
+      return {
+        ts,
+        time: d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        fullTime: d.toLocaleString(),
+        ms: avg,
+        success: !!b.successes.length,
+        p95: p95 ?? undefined,
+        p99: p99 ?? undefined,
+        min: min ?? undefined,
+        max: max ?? undefined,
+        count: b.count,
+        failures: b.failures,
+      }
+    })
+  return result
+}
+
+const CustomTooltip = ({ active, payload }: { active?: boolean; payload?: { payload: AggPoint }[] }) => {
   if (active && payload && payload.length) {
     const data = payload[0].payload
     return (
@@ -26,6 +100,23 @@ const CustomTooltip = ({ active, payload, label }: any) => {
           <span className="text-xs text-muted-foreground">响应时间:</span>
           <span className="font-mono font-medium">{data.ms}ms</span>
         </div>
+        {typeof data.p95 === 'number' && (
+          <div className="flex items-center gap-2 mt-1">
+            <span className="text-xs text-muted-foreground">P95:</span>
+            <span className="font-mono font-medium">{data.p95}ms</span>
+          </div>
+        )}
+        {typeof data.p99 === 'number' && (
+          <div className="flex items-center gap-2 mt-1">
+            <span className="text-xs text-muted-foreground">P99:</span>
+            <span className="font-mono font-medium">{data.p99}ms</span>
+          </div>
+        )}
+        {typeof data.count === 'number' && (
+          <div className="pt-1 mt-1 border-t text-[10px] text-muted-foreground">
+            5分钟时段统计 (样本: {data.count})
+          </div>
+        )}
         <div className="flex items-center gap-2 mt-1">
           <span className="text-xs text-muted-foreground">状态:</span>
           <Badge variant={data.success ? "default" : "destructive"} className={`h-5 px-1.5 text-[10px] ${data.success ? "bg-green-600" : ""}`}>
@@ -39,49 +130,45 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 }
 
 export function MonitorDetail({ monitor, open, onClose }: MonitorDetailProps) {
-  const [history, setHistory] = useState<any[]>([])
+  type ChartPoint = AggPoint | RawPoint
+  const [history, setHistory] = useState<ChartPoint[]>([])
   const [ssl, setSsl] = useState<SSLInfo | null>(null)
-  const [loading, setLoading] = useState(false)
 
   useEffect(() => {
     if (monitor && open) {
-      setLoading(true)
-      // Fetch history for last 24 hours (1 day)
       Promise.all([
         getHistory(monitor.id, 1).catch(() => []),
         getSSL(monitor.id).catch(() => null)
       ]).then(([h, s]) => {
-        // Format history for chart
-        // Assuming h has created_at and response_ms
-        const formatted = h
-          .map((item: any) => {
-            const d = new Date(item.created_at)
+        const formatted: RawPoint[] = (Array.isArray(h) ? h : [])
+          .map((item: ApiHistoryItem) => {
+            const dateStr = item.created_at ?? item.checked_at ?? ''
+            const d = new Date(dateStr)
+            const ok = typeof item.success === 'boolean' ? item.success : !!item.online
+            const msVal = ok && typeof item.response_ms === 'number' ? item.response_ms : null
             return {
               ts: d.getTime(),
               time: d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
               fullTime: d.toLocaleString(),
-              ms: item.success ? item.response_ms : null,
-              success: item.success
+              ms: msVal,
+              success: ok
             }
           })
-          .sort((a: any, b: any) => a.ts - b.ts)
-        
-        setHistory(formatted)
+          .sort((a, b) => a.ts - b.ts)
+        const aggregated = aggregateHistory(formatted, 5)
+        const hasAgg = aggregated.some(pt => typeof pt.ms === 'number')
+        const hasRaw = formatted.some(pt => typeof pt.ms === 'number')
+        const chartData: ChartPoint[] = hasAgg ? aggregated : hasRaw ? formatted : []
+        setHistory(chartData)
         setSsl(s)
-        setLoading(false)
       })
     }
   }, [monitor, open])
 
-  // 计算是否有有效数据（非全失败）
-  const hasValidData = history.some(h => h.success && typeof h.ms === 'number')
+  const hasValidData = history.some(h => typeof h.ms === 'number')
 
   if (!monitor) return null
 
-  // Chart colors based on theme, though CSS variables are preferred if they work
-  // We use CSS variables in style props for Recharts to ensure they react to theme changes
-  // Note: Recharts might need explicit colors for some elements in some environments
-  
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
       <DialogContent className="sm:max-w-[800px]">
@@ -149,11 +236,7 @@ export function MonitorDetail({ monitor, open, onClose }: MonitorDetailProps) {
               <span>响应时间 (24h)</span>
             </div>
             <div className="h-[250px] w-full rounded-lg border p-4 bg-card">
-              {loading ? (
-                <div className="h-full w-full flex items-center justify-center">
-                  <Skeleton className="h-full w-full" />
-                </div>
-              ) : history.length > 0 ? (
+              {history.length > 0 ? (
                 hasValidData ? (
                   <ResponsiveContainer width="100%" height="100%">
                     <LineChart data={history} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
@@ -174,13 +257,13 @@ export function MonitorDetail({ monitor, open, onClose }: MonitorDetailProps) {
                         domain={[0, 'auto']}
                       />
                       <Tooltip content={<CustomTooltip />} />
-                      <Line 
-                        type="monotone" 
-                        dataKey="ms" 
-                        stroke="hsl(var(--primary))" 
-                        strokeWidth={2} 
+                      <Line
+                        type="monotone"
+                        dataKey="ms"
+                        stroke="#3b82f6"
+                        strokeWidth={3}
                         dot={false}
-                        activeDot={{ r: 4, fill: "hsl(var(--primary))" }}
+                        activeDot={{ r: 6, fill: "#3b82f6", stroke: "white", strokeWidth: 2 }}
                         connectNulls={true}
                         isAnimationActive={false}
                       />
