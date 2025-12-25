@@ -96,6 +96,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("/api/groups", s.handleGroups)
 	s.mux.HandleFunc("/api/groups/", s.handleGroupByID)
 	s.mux.HandleFunc("/api/notifications", s.handleNotifications)
+	s.mux.HandleFunc("/api/notifications/", s.handleNotificationByID)
 	s.mux.HandleFunc("/api/notifications/test", s.handleNotificationsTest)
 	s.mux.HandleFunc("/api/public/subscribe", s.handlePublicSubscribe)
 	s.mux.HandleFunc("/api/subscriptions/verify", s.handleSubscriptionVerify)
@@ -899,6 +900,31 @@ func (s *Server) handleNotifications(w http.ResponseWriter, r *http.Request) {
 		"items": list,
 		"total": total,
 	})
+}
+
+func (s *Server) handleNotificationByID(w http.ResponseWriter, r *http.Request) {
+	path := strings.TrimPrefix(r.URL.Path, "/api/notifications/")
+	id, err := strconv.Atoi(path)
+	if err != nil || id <= 0 {
+		w.WriteHeader(404)
+		return
+	}
+
+	if r.Method == http.MethodDelete {
+		if !s.adminOK(r) {
+			http.Error(w, "unauthorized", 401)
+			return
+		}
+		_, err := s.s.DB().Exec(`DELETE FROM notifications WHERE id=$1`, id)
+		if err != nil {
+			http.Error(w, err.Error(), 500)
+			return
+		}
+		w.WriteHeader(204)
+		return
+	}
+
+	w.WriteHeader(405)
 }
 
 func (s *Server) handleNotificationsTest(w http.ResponseWriter, r *http.Request) {

@@ -143,6 +143,10 @@ export async function getNotifications(page = 1, limit = 20, type = '') {
   return Array.isArray(data) ? { items: data, total: data.length } : data
 }
 
+export async function deleteNotification(id: number) {
+  await request(`/api/notifications/${id}`, { method: 'DELETE' })
+}
+
 export async function getSubscriptions(monitorId: number) {
   return request(`/api/subscriptions?monitor_id=${monitorId}`)
 }

@@ -15,6 +15,7 @@ interface AnimatedCounterProps {
 
 export const AnimatedCounter = ({ value, className, suffix }: AnimatedCounterProps) => {
   const ref = useRef<HTMLSpanElement>(null)
+  const prevRef = useRef<number | null>(null)
   
   const { num, unit } = useMemo(() => {
     if (typeof value === 'number') return { num: value, unit: suffix || '' }
@@ -29,12 +30,13 @@ export const AnimatedCounter = ({ value, className, suffix }: AnimatedCounterPro
   
   useGSAP(() => {
     if (isNum && ref.current) {
-      gsap.from(ref.current, {
-        textContent: 0,
-        duration: 2,
-        ease: 'power3.out',
-        snap: { textContent: 1 }
-      })
+      const from = prevRef.current ?? 0
+      gsap.fromTo(
+        ref.current,
+        { textContent: from },
+        { textContent: num as number, duration: 2, ease: 'power3.out', snap: { textContent: 1 } }
+      )
+      prevRef.current = num as number
     }
   }, [num])
 

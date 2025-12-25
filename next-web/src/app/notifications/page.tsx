@@ -6,8 +6,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { AlertTriangle, ArrowLeft, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react'
-import { getNotifications, getSetupState, getSettings } from '@/lib/api'
+import { AlertTriangle, ArrowLeft, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Trash2 } from 'lucide-react'
+import { getNotifications, getSetupState, getSettings, deleteNotification } from '@/lib/api'
 import { NotificationItem } from '@/types'
 import { toast } from 'sonner'
 import { useTheme } from 'next-themes'
@@ -31,6 +31,17 @@ export default function NotificationsPage() {
       toast.error('获取通知失败')
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleDelete = async (id: number) => {
+    if (!confirm('确定要删除这条通知吗？')) return
+    try {
+      await deleteNotification(id)
+      toast.success('已删除')
+      fetchData()
+    } catch (e) {
+      toast.error('删除失败')
     }
   }
 
@@ -83,6 +94,7 @@ export default function NotificationsPage() {
                       <TableHead className="w-[150px]">站点</TableHead>
                       <TableHead className="w-[100px]">类型</TableHead>
                       <TableHead>消息</TableHead>
+                      <TableHead className="w-[80px]">操作</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -101,6 +113,11 @@ export default function NotificationsPage() {
                         </TableCell>
                         <TableCell className="max-w-[400px] truncate" title={notice.message}>
                           {notice.message}
+                        </TableCell>
+                        <TableCell>
+                          <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive" onClick={() => handleDelete(notice.id)}>
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
                         </TableCell>
                       </TableRow>
                     ))}

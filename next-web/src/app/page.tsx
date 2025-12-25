@@ -157,7 +157,7 @@ export default function Dashboard() {
   
   const avgRespAll = useMemo(() => {
     const values = Object.entries(latest).map(([id,v]) => ({ id: Number(id), v }))
-    const used = values.filter(x => typeof x.v === 'number' && x.v >= 0)
+    const used = values.filter(x => typeof x.v === 'number' && x.v > 0)
     if (!used.length) return '-'
     const sum = used.reduce((s, x) => s + x.v, 0)
     return Math.round(sum / used.length)
@@ -166,12 +166,30 @@ export default function Dashboard() {
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-black transition-colors duration-300">
       <header className="bg-white dark:bg-neutral-900 shadow-sm border-b border-slate-200 dark:border-neutral-800 px-4 md:px-6 h-16 sticky top-0 z-50 transition-colors duration-300">
+        <style jsx>{`
+          @keyframes titleIn {
+            0% { opacity: 0; transform: translateY(6px); }
+            100% { opacity: 1; transform: translateY(0); }
+          }
+          @keyframes subtitleIn {
+            0% { opacity: 0; transform: translateX(-6px); }
+            100% { opacity: 1; transform: translateX(0); }
+          }
+          .animate-title-in { animation: titleIn 600ms cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+          .animate-subtitle-in { animation: subtitleIn 600ms 120ms cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+        `}</style>
         <div className="w-full max-w-screen-xl mx-auto flex items-center justify-between h-full">
           <div className="flex items-center gap-3 group cursor-default">
             <img src="/img/favicon.svg" alt="logo" className="w-8 h-8 transition-all duration-500 group-hover:rotate-12 group-hover:scale-110" />
             <div className="flex flex-col">
-              <h1 className="text-lg font-bold text-slate-800 dark:text-neutral-200 transition-colors duration-300 group-hover:text-blue-600 dark:group-hover:text-blue-400 m-0 leading-none">{siteName}</h1>
-              {subtitle && <span className="text-slate-500 dark:text-neutral-400 text-xs mt-1 hidden sm:block">{subtitle}</span>}
+              <h1 className="animate-title-in text-lg font-bold tracking-tight text-slate-800 dark:text-neutral-200 transition-colors duration-300 group-hover:text-blue-600 dark:group-hover:text-blue-400 m-0 leading-none">
+                {siteName}
+              </h1>
+              {subtitle && (
+                <span className="animate-subtitle-in subtitle-quote hidden sm:block text-slate-500 dark:text-neutral-400 text-xs leading-5 tracking-wide pl-8">
+                  {subtitle}
+                </span>
+              )}
             </div>
           </div>
           <div className="flex items-center gap-4">
@@ -194,7 +212,7 @@ export default function Dashboard() {
 
       <main className="px-4 md:px-6 py-4">
         <div className="w-full max-w-screen-xl mx-auto space-y-4">
-          <NotificationTicker notices={notices} loading={loading} onClick={() => {}} />
+          <NotificationTicker notices={notices} loading={loading} />
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <Card className="hover:-translate-y-1 transition-transform duration-300">

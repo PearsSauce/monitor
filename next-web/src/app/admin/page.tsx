@@ -63,6 +63,8 @@ const notifySchema = z.object({
 export default function AdminPage() {
   const router = useRouter()
   const [mounted, setMounted] = useState(false)
+  const [siteName, setSiteName] = useState('服务监控系统')
+  const [subtitle, setSubtitle] = useState('')
   const [list, setList] = useState<Monitor[]>([])
   const [groups, setGroups] = useState<Group[]>([])
   const [subsAll, setSubsAll] = useState<any[]>([])
@@ -124,6 +126,10 @@ export default function AdminPage() {
         subtitle: s.subtitle || '',
         tab_subtitle: s.tab_subtitle || ''
       })
+      setSiteName(s.site_name || '服务监控系统')
+      setSubtitle(s.subtitle || '')
+      if (s.tab_subtitle) document.title = `${s.site_name} - ${s.tab_subtitle}`
+      else document.title = s.site_name
       dataForm.reset({
         history_days_frontend: s.history_days_frontend || 30,
         retention_days: s.retention_days || 30,
@@ -237,9 +243,24 @@ export default function AdminPage() {
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-black transition-colors duration-300">
       <header className="bg-white dark:bg-neutral-900 shadow-sm border-b border-slate-200 dark:border-neutral-800 px-4 md:px-6 h-16 sticky top-0 z-50 transition-colors duration-300">
+        <style jsx>{`
+          @keyframes titleIn {
+            0% { opacity: 0; transform: translateY(6px); }
+            100% { opacity: 1; transform: translateY(0); }
+          }
+          @keyframes subtitleIn {
+            0% { opacity: 0; transform: translateX(-6px); }
+            100% { opacity: 1; transform: translateX(0); }
+          }
+          .animate-title-in { animation: titleIn 600ms cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+          .animate-subtitle-in { animation: subtitleIn 600ms 120ms cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+        `}</style>
         <div className="w-full max-w-screen-xl mx-auto flex items-center justify-between h-full">
           <div className="flex items-center gap-3">
-            <h1 className="text-lg font-bold">Admin Dashboard</h1>
+            <div className="flex flex-col">
+              <h1 className="animate-title-in text-lg font-bold tracking-tight text-slate-800 dark:text-neutral-200 leading-none">{siteName}</h1>
+              {subtitle && <span className="animate-subtitle-in subtitle-quote hidden sm:block text-slate-500 dark:text-neutral-400 text-xs leading-5 tracking-wide pl-8">{subtitle}</span>}
+            </div>
           </div>
           <div className="flex items-center gap-2">
             <ThemeToggle />
