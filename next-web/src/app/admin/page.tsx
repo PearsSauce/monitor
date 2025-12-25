@@ -33,6 +33,7 @@ import { toast } from 'sonner'
 import { Home, Power, Plus, Settings, Monitor as MonitorIcon, Bell, Database, Globe, Trash2, Edit } from 'lucide-react'
 import Link from 'next/link'
 import { ThemeToggle } from '@/components/theme-toggle'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 
 // Form schemas
 const websiteSchema = z.object({
@@ -305,54 +306,61 @@ export default function AdminPage() {
                   </div>
                 </CardHeader>
                 <CardContent>
-                  <div className="rounded-md border">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>名称</TableHead>
-                          <TableHead>状态</TableHead>
-                          <TableHead>URL</TableHead>
-                          <TableHead>分组</TableHead>
-                          <TableHead>最近检查</TableHead>
-                          <TableHead>操作</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {list.map((r) => {
-                          const g = groups.find(x => x.id === r.group_id)
-                          return (
-                            <TableRow key={r.id}>
-                              <TableCell className="font-medium">{r.name}</TableCell>
-                              <TableCell>
-                                <Badge variant={r.last_online ? "default" : "destructive"} className={r.last_online ? "bg-green-600" : ""}>
-                                  {r.last_online ? '在线' : '离线'}
-                                </Badge>
-                              </TableCell>
-                              <TableCell className="max-w-[200px] truncate">{r.url}</TableCell>
-                              <TableCell>
-                                {g ? (
-                                  <Badge variant="outline" style={{ backgroundColor: g.color, color: g.color ? '#fff' : undefined, borderColor: g.color || undefined }}>
-                                    {g.icon ? `${g.icon} ` : ''}{g.name}
+                  {list.length === 0 ? (
+                    <Alert>
+                      <AlertTitle>暂无监控项</AlertTitle>
+                      <AlertDescription>点击右上方“新建监控”以添加站点监控。</AlertDescription>
+                    </Alert>
+                  ) : (
+                    <div className="rounded-md border">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>名称</TableHead>
+                            <TableHead>状态</TableHead>
+                            <TableHead>URL</TableHead>
+                            <TableHead>分组</TableHead>
+                            <TableHead>最近检查</TableHead>
+                            <TableHead>操作</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {list.map((r) => {
+                            const g = groups.find(x => x.id === r.group_id)
+                            return (
+                              <TableRow key={r.id}>
+                                <TableCell className="font-medium">{r.name}</TableCell>
+                                <TableCell>
+                                  <Badge variant={r.last_online ? "default" : "destructive"} className={r.last_online ? "bg-green-600" : ""}>
+                                    {r.last_online ? '在线' : '离线'}
                                   </Badge>
-                                ) : '-'}
-                              </TableCell>
-                              <TableCell>{r.last_checked_at ? new Date(r.last_checked_at).toLocaleString() : '-'}</TableCell>
-                              <TableCell>
-                                <div className="flex space-x-2">
-                                  <Button size="sm" variant="outline" onClick={() => { setEditingMonitor(r); setShowMonitorForm(true) }}>
-                                    <Edit className="h-4 w-4" />
-                                  </Button>
-                                  <Button size="sm" variant="destructive" onClick={() => setMonitorToDelete(r)}>
-                                    <Trash2 className="h-4 w-4" />
-                                  </Button>
-                                </div>
-                              </TableCell>
-                            </TableRow>
-                          )
-                        })}
-                      </TableBody>
-                    </Table>
-                  </div>
+                                </TableCell>
+                                <TableCell className="max-w-[200px] truncate">{r.url}</TableCell>
+                                <TableCell>
+                                  {g ? (
+                                    <Badge variant="outline" style={{ backgroundColor: g.color, color: g.color ? '#fff' : undefined, borderColor: g.color || undefined }}>
+                                      {g.icon ? `${g.icon} ` : ''}{g.name}
+                                    </Badge>
+                                  ) : '-'}
+                                </TableCell>
+                                <TableCell>{r.last_checked_at ? new Date(r.last_checked_at).toLocaleString() : '-'}</TableCell>
+                                <TableCell>
+                                  <div className="flex space-x-2">
+                                    <Button size="sm" variant="outline" onClick={() => { setEditingMonitor(r); setShowMonitorForm(true) }}>
+                                      <Edit className="h-4 w-4" />
+                                    </Button>
+                                    <Button size="sm" variant="destructive" onClick={() => setMonitorToDelete(r)}>
+                                      <Trash2 className="h-4 w-4" />
+                                    </Button>
+                                  </div>
+                                </TableCell>
+                              </TableRow>
+                            )
+                          })}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             </TabsContent>
@@ -421,6 +429,31 @@ export default function AdminPage() {
                                   .map((x: string) => x.trim())
                                   .includes(subFilterEvent)
                           return monitorOk && emailOk && eventOk
+                        })).length === 0 ? (
+                          <TableRow>
+                            <TableCell colSpan={6}>
+                              <Alert>
+                                <AlertTitle>暂无订阅</AlertTitle>
+                                <AlertDescription>没有匹配的订阅结果，试试调整筛选条件。</AlertDescription>
+                              </Alert>
+                            </TableCell>
+                          </TableRow>
+                        ) : (subsAll.filter((sub) => {
+                          const monitorOk =
+                            subFilterMonitorId === '' || subFilterMonitorId === '__ALL_MONITORS__'
+                              ? true
+                              : String(sub.monitor_id) === subFilterMonitorId
+                          const emailOk = subFilterEmail
+                            ? String(sub.email || '').toLowerCase().includes(subFilterEmail.toLowerCase())
+                            : true
+                          const eventOk =
+                            subFilterEvent === '' || subFilterEvent === '__ALL_EVENTS__'
+                              ? true
+                              : String(sub.notify_events || '')
+                                  .split(',')
+                                  .map((x: string) => x.trim())
+                                  .includes(subFilterEvent)
+                          return monitorOk && emailOk && eventOk
                         })).map((sub) => (
                           <TableRow key={sub.id}>
                             <TableCell>{sub.monitor_name}</TableCell>
@@ -430,11 +463,8 @@ export default function AdminPage() {
                                 {sub.notify_events?.split(',').map((e: string, i: number) => {
                                   const t = e.trim()
                                   if (!t) return null
-                                  return (
-                                    <Badge key={i} variant="outline">
-                                      {t === 'offline' ? '离线' : t === 'online' ? '恢复' : t === 'ssl_expiry' ? '证书到期' : t}
-                                    </Badge>
-                                  )
+                                  const label = t === 'offline' ? '离线' : t === 'online' ? '恢复' : t === 'ssl_expiry' ? '证书到期' : t
+                                  return <Badge key={i} variant="secondary" className="whitespace-nowrap">{label}</Badge>
                                 })}
                               </div>
                             </TableCell>

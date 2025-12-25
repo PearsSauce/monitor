@@ -240,16 +240,16 @@ export function MonitorDetail({ monitor, open, onClose }: MonitorDetailProps) {
                 hasValidData ? (
                   <ResponsiveContainer width="100%" height="100%">
                     <LineChart data={history} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" />
                       <XAxis 
                         dataKey="time" 
-                        tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }}
+                        tick={{ fontSize: 11, fill: 'var(--muted-foreground)' }}
                         tickLine={false}
                         axisLine={false}
                         minTickGap={60}
                       />
                       <YAxis 
-                        tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }}
+                        tick={{ fontSize: 11, fill: 'var(--muted-foreground)' }}
                         tickLine={false}
                         axisLine={false}
                         tickFormatter={(value) => `${value}ms`}
@@ -263,7 +263,7 @@ export function MonitorDetail({ monitor, open, onClose }: MonitorDetailProps) {
                         stroke="#3b82f6"
                         strokeWidth={3}
                         dot={false}
-                        activeDot={{ r: 6, fill: "#3b82f6", stroke: "white", strokeWidth: 2 }}
+                        activeDot={{ r: 6, fill: "#3b82f6", stroke: "var(--background)", strokeWidth: 2 }}
                         connectNulls={true}
                         isAnimationActive={false}
                       />

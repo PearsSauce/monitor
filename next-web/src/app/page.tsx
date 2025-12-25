@@ -12,7 +12,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Switch } from '@/components/ui/switch'
-import { Monitor as MonitorIcon, CheckCircle, XCircle, Clock, Moon, Sun, User } from 'lucide-react'
+import { Monitor as MonitorIcon, CheckCircle, XCircle, Clock, Moon, Sun, User, BellRing } from 'lucide-react'
 import { useTheme } from 'next-themes'
 import { cn } from '@/lib/utils'
 import Link from 'next/link'
@@ -266,7 +266,10 @@ export default function Dashboard() {
               <div className="flex items-center justify-between">
                 <CardTitle>监控列表</CardTitle>
                 <div className="flex items-center gap-2">
-                  <Button variant="outline" onClick={() => setShowUnifiedSubscribe(true)}>统一订阅</Button>
+                  <Button variant="outline" onClick={() => setShowUnifiedSubscribe(true)} className="gap-2">
+                    <BellRing className="h-4 w-4" />
+                    统一订阅
+                  </Button>
                 </div>
               </div>
             </CardHeader>

@@ -12,6 +12,19 @@ import { NotificationItem } from '@/types'
 import { toast } from 'sonner'
 import { useTheme } from 'next-themes'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbSeparator, BreadcrumbPage } from '@/components/ui/breadcrumb'
+import { Pagination } from '@/components/ui/pagination'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 
 export default function NotificationsPage() {
   const router = useRouter()
@@ -20,6 +33,7 @@ export default function NotificationsPage() {
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
   const pageSize = 50
+  const [noticeToDelete, setNoticeToDelete] = useState<NotificationItem | null>(null)
 
   const fetchData = async () => {
     try {
@@ -34,13 +48,14 @@ export default function NotificationsPage() {
     }
   }
 
-  const handleDelete = async (id: number) => {
-    if (!confirm('确定要删除这条通知吗？')) return
+  const confirmDelete = async () => {
+    if (!noticeToDelete) return
     try {
-      await deleteNotification(id)
+      await deleteNotification(noticeToDelete.id)
       toast.success('已删除')
+      setNoticeToDelete(null)
       fetchData()
-    } catch (e) {
+    } catch {
       toast.error('删除失败')
     }
   }
@@ -59,13 +74,18 @@ export default function NotificationsPage() {
     <div className="min-h-screen bg-background">
       <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="w-full max-w-screen-xl mx-auto flex h-14 items-center px-4 md:px-6">
-          <Button variant="ghost" size="icon" className="mr-4" onClick={() => router.back()}>
+          <Button variant="ghost" size="icon" className="mr-3" onClick={() => router.back()}>
             <ArrowLeft className="h-5 w-5" />
           </Button>
-          <div className="flex items-center gap-2 font-semibold">
-            <AlertTriangle className="h-5 w-5 text-red-600" />
-            <span>异常通知历史记录</span>
-          </div>
+          <Breadcrumb>
+            <BreadcrumbItem>
+              <BreadcrumbLink href="/">首页</BreadcrumbLink>
+            </BreadcrumbItem>
+            <BreadcrumbSeparator />
+            <BreadcrumbItem>
+              <BreadcrumbPage>异常通知历史记录</BreadcrumbPage>
+            </BreadcrumbItem>
+          </Breadcrumb>
         </div>
       </header>
 
@@ -82,9 +102,10 @@ export default function NotificationsPage() {
                 ))}
               </div>
             ) : notices.length === 0 ? (
-              <div className="text-center py-10 text-muted-foreground">
-                暂无异常记录
-              </div>
+              <Alert className="my-4">
+                <AlertTitle>暂无异常记录</AlertTitle>
+                <AlertDescription>近期没有任何异常或通知事件。</AlertDescription>
+              </Alert>
             ) : (
               <div className="rounded-md border">
                 <Table>
@@ -115,7 +136,7 @@ export default function NotificationsPage() {
                           {notice.message}
                         </TableCell>
                         <TableCell>
-                          <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive" onClick={() => handleDelete(notice.id)}>
+                          <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive" onClick={() => setNoticeToDelete(notice)}>
                             <Trash2 className="h-4 w-4" />
                           </Button>
                         </TableCell>
@@ -125,54 +146,34 @@ export default function NotificationsPage() {
                 </Table>
               </div>
             )}
-            
             {total > pageSize && (
-              <div className="flex items-center justify-between px-2 mt-4">
-                <div className="text-sm text-muted-foreground">
-                  共 {total} 条记录
-                </div>
-                <div className="flex items-center space-x-2">
-                  <Button
-                    variant="outline"
-                    className="h-8 w-8 p-0"
-                    onClick={() => setPage(1)}
-                    disabled={page === 1 || loading}
-                  >
-                    <ChevronsLeft className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    variant="outline"
-                    className="h-8 w-8 p-0"
-                    onClick={() => setPage(p => p - 1)}
-                    disabled={page <= 1 || loading}
-                  >
-                    <ChevronLeft className="h-4 w-4" />
-                  </Button>
-                  <div className="flex w-[100px] items-center justify-center text-sm font-medium">
-                    第 {page} / {Math.ceil(total / pageSize)} 页
-                  </div>
-                  <Button
-                    variant="outline"
-                    className="h-8 w-8 p-0"
-                    onClick={() => setPage(p => p + 1)}
-                    disabled={page * pageSize >= total || loading}
-                  >
-                    <ChevronRight className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    variant="outline"
-                    className="h-8 w-8 p-0"
-                    onClick={() => setPage(Math.ceil(total / pageSize))}
-                    disabled={page * pageSize >= total || loading}
-                  >
-                    <ChevronsRight className="h-4 w-4" />
-                  </Button>
+              <div className="mt-4">
+                <div className="flex items-center justify-between px-2">
+                  <div className="text-sm text-muted-foreground">共 {total} 条记录</div>
+                  <Pagination
+                    page={page}
+                    pageCount={Math.ceil(total / pageSize)}
+                    onChange={(p) => setPage(p)}
+                    disabled={loading}
+                  />
                 </div>
               </div>
             )}
           </CardContent>
         </Card>
       </main>
+      <AlertDialog open={!!noticeToDelete} onOpenChange={(open) => !open && setNoticeToDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>确定删除这条通知吗？</AlertDialogTitle>
+            <AlertDialogDescription>此操作不可撤销。</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>取消</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDelete} className="bg-red-600 hover:bg-red-700">确认删除</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }
