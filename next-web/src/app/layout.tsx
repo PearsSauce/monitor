@@ -16,6 +16,11 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Service Monitor",
   description: "Monitor your services status",
+  icons: {
+    icon: "/img/favicon.svg",
+    shortcut: "/img/favicon.svg",
+    apple: "/img/favicon.svg",
+  },
 };
 
 import { Toaster } from "@/components/ui/sonner"

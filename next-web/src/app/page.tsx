@@ -11,8 +11,8 @@ import { AnimatedCounter } from '@/components/AnimatedCounter'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Switch } from '@/components/ui/switch'
-import { Monitor as MonitorIcon, CheckCircle, XCircle, Clock, Moon, Sun, User, BellRing } from 'lucide-react'
+import { Monitor as MonitorIcon, CheckCircle, XCircle, Clock, Moon, Sun, User, BellRing, Github } from 'lucide-react'
+import { SystemStatus } from '@/components/SystemStatus'
 import { useTheme } from 'next-themes'
 import { cn } from '@/lib/utils'
 import Link from 'next/link'
@@ -164,8 +164,8 @@ export default function Dashboard() {
   }, [latest])
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-black transition-colors duration-300">
-      <header className="bg-white dark:bg-neutral-900 shadow-sm border-b border-slate-200 dark:border-neutral-800 px-4 md:px-6 h-16 sticky top-0 z-50 transition-colors duration-300">
+    <div className="min-h-screen flex flex-col bg-slate-50 dark:bg-black transition-colors duration-300">
+      <header className="bg-white/80 dark:bg-neutral-900/80 backdrop-blur-md shadow-sm border-b border-slate-200 dark:border-neutral-800 px-4 md:px-6 h-16 sticky top-0 z-50 transition-colors duration-300">
         <style jsx>{`
           @keyframes titleIn {
             0% { opacity: 0; transform: translateY(6px); }
@@ -195,10 +195,15 @@ export default function Dashboard() {
           <div className="flex items-center gap-4">
             <div className="flex items-center space-x-2">
               {mounted && (
-                <>
-                  <Switch checked={resolvedTheme === 'dark'} onCheckedChange={(v) => setTheme(v ? 'dark' : 'light')} />
-                  {resolvedTheme === 'dark' ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
-                </>
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  onClick={() => setTheme(resolvedTheme === 'dark' ? 'light' : 'dark')}
+                >
+                  <Sun className="h-5 w-5 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
+                  <Moon className="absolute h-5 w-5 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
+                  <span className="sr-only">Toggle theme</span>
+                </Button>
               )}
             </div>
             <Link href={mounted && getToken() ? '/admin' : '/login'}>
@@ -215,48 +220,48 @@ export default function Dashboard() {
           <NotificationTicker notices={notices} loading={loading} />
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <Card className="hover:-translate-y-1 transition-transform duration-300">
-              <CardContent className="pt-6 relative overflow-hidden">
-                <div className="relative z-10">
-                  <p className="text-sm font-medium text-muted-foreground">总站点数</p>
-                  <div className="text-3xl md:text-4xl mt-2 font-bold">
-                    {loading ? <Skeleton className="h-9 w-24" /> : <AnimatedCounter value={totalCount} />}
-                  </div>
+            <Card className="hover:shadow-md hover:bg-accent/5 transition-all">
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">总站点数</CardTitle>
+                <MonitorIcon className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">
+                  {loading ? <Skeleton className="h-8 w-24" /> : <AnimatedCounter value={totalCount} />}
                 </div>
-                <MonitorIcon className="absolute -right-4 -bottom-4 text-8xl text-blue-500 opacity-10 transform rotate-12" />
               </CardContent>
             </Card>
-            <Card className="hover:-translate-y-1 transition-transform duration-300">
-              <CardContent className="pt-6 relative overflow-hidden">
-                <div className="relative z-10">
-                  <p className="text-sm font-medium text-muted-foreground">在线站点</p>
-                  <div className="text-3xl md:text-4xl mt-2 font-bold text-green-600">
-                    {loading ? <Skeleton className="h-9 w-24" /> : <AnimatedCounter value={onlineCount} />}
-                  </div>
+            <Card className="hover:shadow-md hover:bg-accent/5 transition-all">
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">在线站点</CardTitle>
+                <CheckCircle className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold text-green-600">
+                  {loading ? <Skeleton className="h-8 w-24" /> : <AnimatedCounter value={onlineCount} />}
                 </div>
-                <CheckCircle className="absolute -right-4 -bottom-4 text-8xl text-green-500 opacity-10 transform rotate-12" />
               </CardContent>
             </Card>
-            <Card className="hover:-translate-y-1 transition-transform duration-300">
-              <CardContent className="pt-6 relative overflow-hidden">
-                <div className="relative z-10">
-                  <p className="text-sm font-medium text-muted-foreground">离线站点</p>
-                  <div className="text-3xl md:text-4xl mt-2 font-bold text-red-600">
-                    {loading ? <Skeleton className="h-9 w-24" /> : <AnimatedCounter value={offlineCount} />}
-                  </div>
+            <Card className="hover:shadow-md hover:bg-accent/5 transition-all">
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">离线站点</CardTitle>
+                <XCircle className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold text-red-600">
+                  {loading ? <Skeleton className="h-8 w-24" /> : <AnimatedCounter value={offlineCount} />}
                 </div>
-                <XCircle className="absolute -right-4 -bottom-4 text-8xl text-red-500 opacity-10 transform rotate-12" />
               </CardContent>
             </Card>
-            <Card className="hover:-translate-y-1 transition-transform duration-300">
-              <CardContent className="pt-6 relative overflow-hidden">
-                <div className="relative z-10">
-                  <p className="text-sm font-medium text-muted-foreground">平均响应</p>
-                  <div className="text-3xl md:text-4xl mt-2 font-bold text-indigo-600">
-                    {loading ? <Skeleton className="h-9 w-24" /> : <AnimatedCounter value={avgRespAll} suffix=" ms" />}
-                  </div>
+            <Card className="hover:shadow-md hover:bg-accent/5 transition-all">
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">平均响应</CardTitle>
+                <Clock className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold text-indigo-600">
+                  {loading ? <Skeleton className="h-8 w-24" /> : <AnimatedCounter value={avgRespAll} suffix=" ms" />}
                 </div>
-                <Clock className="absolute -right-4 -bottom-4 text-8xl text-indigo-500 opacity-10 transform rotate-12" />
               </CardContent>
             </Card>
           </div>
@@ -286,6 +291,22 @@ export default function Dashboard() {
           </Card>
         </div>
       </main>
+
+      <footer className="border-t border-slate-200 dark:border-neutral-800 bg-white/50 dark:bg-neutral-900/50 backdrop-blur-sm mt-auto">
+        <div className="w-full max-w-screen-xl mx-auto px-4 md:px-6 h-16 flex flex-col md:flex-row items-center justify-between text-sm text-muted-foreground gap-4 md:gap-0">
+          <div className="flex items-center gap-4">
+            <span>&copy; {new Date().getFullYear()} {siteName}. All rights reserved.</span>
+          </div>
+          <div className="flex items-center gap-4">
+            <a href="https://github.com" target="_blank" rel="noopener noreferrer" className="hover:text-foreground transition-colors flex items-center gap-1.5">
+              <Github className="h-4 w-4" />
+              <span className="hidden sm:inline">GitHub</span>
+            </a>
+            <div className="h-4 w-[1px] bg-border hidden sm:block" />
+            <SystemStatus />
+          </div>
+        </div>
+      </footer>
 
       <MonitorDetail 
         monitor={detailMonitor} 
