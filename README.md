@@ -1,10 +1,9 @@
 # Monitor Dashboard
 
-一个现代化的服务监控仪表盘，提供实时状态监控、SSL证书检查、异常通知轮播及管理后台功能。支持响应式设计，完美适配移动端与桌面端。
+一个现代化的服务监控仪表盘，基于 Next.js 和 Go 构建。提供实时状态监控、SSL 证书检查、异常通知轮播及管理后台功能。支持响应式设计，完美适配移动端与桌面端。
 
 ## 作者
-
-**青桔气球**
+<a href="https://status.nsuuu.com" target="_blank" rel="noopener noreferrer">青桔气球</a>
 
 ## 功能特性
 
@@ -20,7 +19,7 @@
   - 站点增删改查
   - 批量管理分组
   - 系统参数配置（检测间隔、重试次数等）
-- **可视化图表**：状态趋势图、响应时间统计（基于 VChart）
+- **可视化图表**：状态趋势图、响应时间统计（基于 Recharts）
 
 ## 技术栈
 
@@ -32,12 +31,12 @@
   - `golang-jwt`: JWT 认证
 
 ### Frontend (前端)
-- **Framework**: React 18
-- **Build Tool**: Vite
-- **UI Component**: Arco Design (字节跳动企业级 UI 库)
-- **Styling**: Tailwind CSS
-- **Animation**: GSAP (GreenSock Animation Platform)
-- **Charts**: VChart
+- **Framework**: Next.js 16 (App Router)
+- **Library**: React 19
+- **UI Component**: shadcn/ui (Based on Radix UI)
+- **Styling**: Tailwind CSS v4
+- **Animation**: GSAP, CSS Animations
+- **Charts**: Recharts
 
 ## 快速开始
 
@@ -64,12 +63,16 @@ go run cmd/server/main.go
 ### 2. 启动前端开发服务器
 
 ```bash
-cd web
+cd next-web
 npm install
 npm run dev
 ```
 
-访问 `http://localhost:5173` 查看仪表盘。
+访问 `http://localhost:3000` 查看仪表盘。
+
+## 预览地址
+
+- <a href="https://status.nsuuu.com" target="_blank" rel="noopener noreferrer">https://status.nsuuu.com</a>
 
 ## 环境变量配置
 
@@ -91,12 +94,35 @@ npm run dev
 │   ├── db/          # 数据库操作
 │   ├── monitor/     # 监控核心逻辑
 │   └── notify/      # 通知服务 (SMTP)
-├── web/             # 前端 React 项目
+├── next-web/        # 前端 Next.js 项目
 │   ├── src/         # 源代码
-│   └── vite.config.ts
+│   │   ├── app/     # App Router 页面
+│   │   ├── components/ # UI 组件
+│   │   └── lib/     # 工具函数
+│   └── public/      # 静态资源
 └── go.mod           # Go 依赖定义
 ```
 
 ## License
 
-[MIT](LICENSE)
+MIT License
+
+Copyright (c) 2025 青桔气球
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
