@@ -27,7 +27,6 @@ export function MonitorList({ monitors, groups, latest, sslMap, loading, onDetai
           <TableRow>
             <TableHead>名称</TableHead>
             <TableHead className="text-center">状态</TableHead>
-            <TableHead>URL</TableHead>
             <TableHead className="text-center">分组</TableHead>
             <TableHead className="text-center">响应</TableHead>
             <TableHead className="text-center">30天状态</TableHead>
@@ -42,7 +41,6 @@ export function MonitorList({ monitors, groups, latest, sslMap, loading, onDetai
               <TableRow key={i}>
                 <TableCell><Skeleton className="h-4 w-[100px]" /></TableCell>
                 <TableCell><Skeleton className="h-6 w-[60px] mx-auto rounded-full" /></TableCell>
-                <TableCell><Skeleton className="h-4 w-[200px]" /></TableCell>
                 <TableCell><Skeleton className="h-6 w-[80px] mx-auto rounded-full" /></TableCell>
                 <TableCell><Skeleton className="h-4 w-[60px] mx-auto" /></TableCell>
                 <TableCell><Skeleton className="h-4 w-[120px] mx-auto" /></TableCell>
@@ -57,7 +55,12 @@ export function MonitorList({ monitors, groups, latest, sslMap, loading, onDetai
             
             return (
               <TableRow key={r.id}>
-                <TableCell className="font-medium">{r.name}</TableCell>
+                <TableCell className="font-medium">
+                  <a href={r.url} target="_blank" rel="noopener noreferrer" className="hover:text-primary hover:underline transition-colors flex items-center gap-1 w-fit">
+                    {r.name}
+                    <ExternalLink className="h-3 w-3 opacity-50" />
+                  </a>
+                </TableCell>
                 <TableCell className="text-center">
                   <TooltipProvider>
                     <Tooltip>
@@ -71,14 +74,6 @@ export function MonitorList({ monitors, groups, latest, sslMap, loading, onDetai
                       </TooltipContent>
                     </Tooltip>
                   </TooltipProvider>
-                </TableCell>
-                <TableCell>
-                  <div className="flex items-center space-x-2">
-                    <span className="truncate max-w-[200px]">{r.url}</span>
-                    <a href={r.url} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:text-blue-600">
-                      <ExternalLink className="h-4 w-4" />
-                    </a>
-                  </div>
                 </TableCell>
                 <TableCell className="text-center">
                   {g ? (

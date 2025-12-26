@@ -12,10 +12,10 @@ import {
 } from 'lucide-react';
 import { NotificationItem } from '@/types';
 import { Skeleton } from '@/components/ui/skeleton';
-import { cn } from '@/lib/utils';
+import { cn, formatNotificationMessage } from '@/lib/utils';
 
 interface NotificationTickerProps {
-  notices: NotificationItem[];
+  limit?: number;notices: NotificationItem[];
   loading?: boolean;
 }
 
@@ -152,7 +152,7 @@ export const NotificationTicker: React.FC<NotificationTickerProps> = ({ notices,
                 </span>
               </div>
               <span className="truncate text-[11px] font-medium text-black/60 dark:text-white/60">
-                {currentNotice?.message || '无详细信息'}
+                {currentNotice ? formatNotificationMessage(currentNotice.message) : '无详细信息'}
               </span>
             </div>
           </div>

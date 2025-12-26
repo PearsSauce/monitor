@@ -25,6 +25,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
+import { formatNotificationMessage } from '@/lib/utils'
 
 export default function NotificationsPage() {
   const router = useRouter()
@@ -133,7 +134,7 @@ export default function NotificationsPage() {
                           </Badge>
                         </TableCell>
                         <TableCell className="max-w-[400px] truncate" title={notice.message}>
-                          {notice.message}
+                          {formatNotificationMessage(notice.message)}
                         </TableCell>
                         <TableCell>
                           <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive" onClick={() => setNoticeToDelete(notice)}>
