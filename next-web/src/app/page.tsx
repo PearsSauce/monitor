@@ -293,16 +293,16 @@ export default function Dashboard() {
       </main>
 
       <footer className="border-t border-slate-200 dark:border-neutral-800 bg-white/50 dark:bg-neutral-900/50 backdrop-blur-sm mt-auto">
-        <div className="w-full max-w-screen-xl mx-auto px-4 md:px-6 h-16 flex flex-col md:flex-row items-center justify-between text-sm text-muted-foreground gap-4 md:gap-0">
-          <div className="flex items-center gap-4">
+        <div className="w-full max-w-screen-xl mx-auto px-4 md:px-6 py-6 md:py-0 md:h-16 flex flex-col-reverse md:flex-row items-center justify-between text-sm text-muted-foreground gap-4 md:gap-0">
+          <div className="flex items-center gap-4 text-xs md:text-sm text-center md:text-left opacity-80 md:opacity-100">
             <span>&copy; {new Date().getFullYear()} {siteName}. All rights reserved.</span>
           </div>
-          <div className="flex items-center gap-4">
-            <a href="https://github.com" target="_blank" rel="noopener noreferrer" className="hover:text-foreground transition-colors flex items-center gap-1.5">
-              <Github className="h-4 w-4" />
-              <span className="hidden sm:inline">GitHub</span>
-            </a>
-            <div className="h-4 w-[1px] bg-border hidden sm:block" />
+          <div className="flex items-center gap-4 md:gap-6">
+            <Link href="https://github.com/chenlong-dev/monitor" target="_blank" rel="noopener noreferrer" className="hover:text-foreground transition-colors flex items-center gap-1.5 group">
+              <Github className="h-4 w-4 text-slate-500 group-hover:text-foreground transition-colors" />
+              <span className="font-medium">GitHub</span>
+            </Link>
+            <div className="h-3 w-[1px] bg-slate-200 dark:bg-neutral-800" />
             <SystemStatus />
           </div>
         </div>
