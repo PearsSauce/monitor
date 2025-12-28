@@ -6,7 +6,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
-import { ExternalLink } from 'lucide-react'
+import { ExternalLink, Loader2 } from 'lucide-react'
 import { StatusBar } from './StatusBar'
 import { SvgIcon } from './SvgIcon'
 import { Card } from '@/components/ui/card'
@@ -21,10 +21,23 @@ interface MonitorListProps {
 }
 
 export function MonitorList({ monitors, groups, latest, sslMap, loading, onDetail }: MonitorListProps) {
+  // 首次加载显示骨架屏（loading && monitors为空），后续更新显示覆盖层（loading && monitors不为空）
+  const showSkeleton = loading && monitors.length === 0
+  const showOverlay = loading && monitors.length > 0
+
+  const LoadingOverlay = () => (
+    <div className="absolute inset-0 bg-background/50 flex items-center justify-center z-50 backdrop-blur-[1px]">
+      <div className="flex items-center gap-2 bg-background border px-4 py-2 rounded-md shadow-sm">
+        <Loader2 className="h-4 w-4 animate-spin" />
+        <span className="text-sm text-muted-foreground">更新中...</span>
+      </div>
+    </div>
+  )
   return (
     <>
       {/* Desktop Table View */}
-      <div className="hidden md:block rounded-md border bg-card">
+      <div className="hidden md:block rounded-md border bg-card relative">
+        {showOverlay && <LoadingOverlay />}
         <Table>
           <TableHeader>
             <TableRow>
@@ -39,7 +52,7 @@ export function MonitorList({ monitors, groups, latest, sslMap, loading, onDetai
             </TableRow>
           </TableHeader>
           <TableBody>
-            {loading ? (
+            {showSkeleton ? (
               Array.from({ length: 5 }).map((_, i) => (
                 <TableRow key={i}>
                   <TableCell><Skeleton className="h-4 w-[100px]" /></TableCell>
@@ -52,12 +65,16 @@ export function MonitorList({ monitors, groups, latest, sslMap, loading, onDetai
                   <TableCell><div className="flex gap-2"><Skeleton className="h-8 w-16" /><Skeleton className="h-8 w-16" /></div></TableCell>
                 </TableRow>
               ))
-            ) : monitors.map((r) => {
+            ) : monitors.map((r, index) => {
               const g = groups.find(x => x.id === r.group_id)
               const ssl = sslMap[r.id]
               
               return (
-                <TableRow key={r.id}>
+                <TableRow 
+                  key={r.id}
+                  className="animate-in fade-in slide-in-from-bottom-2 duration-300 fill-mode-both"
+                  style={{ animationDelay: `${index * 50}ms` }}
+                >
                   <TableCell className="font-medium">
                     <a href={r.url} target="_blank" rel="noopener noreferrer" className="hover:text-primary hover:underline transition-colors flex items-center gap-1 w-fit">
                       {r.name}
@@ -126,8 +143,9 @@ export function MonitorList({ monitors, groups, latest, sslMap, loading, onDetai
       </div>
 
       {/* Mobile Card View */}
-      <div className="md:hidden space-y-4">
-        {loading ? (
+      <div className="md:hidden space-y-4 relative min-h-[200px]">
+        {showOverlay && <LoadingOverlay />}
+        {showSkeleton ? (
           Array.from({ length: 3 }).map((_, i) => (
             <div key={i} className="rounded-md border bg-card p-4 space-y-3">
               <div className="flex justify-between items-center">
@@ -141,12 +159,16 @@ export function MonitorList({ monitors, groups, latest, sslMap, loading, onDetai
               <Skeleton className="h-4 w-full" />
             </div>
           ))
-        ) : monitors.map((r) => {
+        ) : monitors.map((r, index) => {
           const g = groups.find(x => x.id === r.group_id)
           const ssl = sslMap[r.id]
           
           return (
-            <Card key={r.id} className="p-4 space-y-4">
+            <Card 
+              key={r.id} 
+              className="p-4 space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300 fill-mode-both"
+              style={{ animationDelay: `${index * 50}ms` }}
+            >
               <div className="flex items-start justify-between">
                 <div className="flex flex-col gap-1">
                   <a href={r.url} target="_blank" rel="noopener noreferrer" className="font-semibold text-base hover:text-primary hover:underline transition-colors flex items-center gap-1">
