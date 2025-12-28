@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
+import { Skeleton } from '@/components/ui/skeleton'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -30,7 +31,7 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import * as z from 'zod'
 import { toast } from 'sonner'
-import { Home, Power, Plus, Settings, Monitor as MonitorIcon, Bell, Database, Globe, Trash2, Edit } from 'lucide-react'
+import { Home, Power, Plus, Settings, Monitor as MonitorIcon, Bell, Database, Globe, Trash2, Edit, Loader2 } from 'lucide-react'
 import Link from 'next/link'
 import { ThemeToggle } from '@/components/theme-toggle'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -64,6 +65,7 @@ const notifySchema = z.object({
 export default function AdminPage() {
   const router = useRouter()
   const [mounted, setMounted] = useState(false)
+  const [loading, setLoading] = useState(true)
   const [siteName, setSiteName] = useState('服务监控系统')
   const [subtitle, setSubtitle] = useState('')
   const [list, setList] = useState<Monitor[]>([])
@@ -152,6 +154,7 @@ export default function AdminPage() {
   }, [router, websiteForm, dataForm, notifyForm])
 
   const fetchData = async () => {
+    setLoading(true)
     try {
       const ms = await getMonitors()
       setList(Array.isArray(ms) ? ms : [])
@@ -161,6 +164,8 @@ export default function AdminPage() {
       setSubsAll(Array.isArray(subs) ? subs : [])
     } catch (e) {
       console.error(e)
+    } finally {
+      setLoading(false)
     }
   }
 
@@ -241,6 +246,18 @@ export default function AdminPage() {
 
   if (!mounted) return null
 
+  const showSkeleton = loading && list.length === 0
+  const showOverlay = loading && list.length > 0
+
+  const LoadingOverlay = () => (
+    <div className="absolute inset-0 bg-background/50 flex items-center justify-center z-50 backdrop-blur-[1px]">
+      <div className="flex items-center gap-2 bg-background border px-4 py-2 rounded-md shadow-sm">
+        <Loader2 className="h-4 w-4 animate-spin" />
+        <span className="text-sm text-muted-foreground">更新中...</span>
+      </div>
+    </div>
+  )
+
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-black transition-colors duration-300">
       <header className="bg-white dark:bg-neutral-900 shadow-sm border-b border-slate-200 dark:border-neutral-800 px-4 md:px-6 h-16 sticky top-0 z-50 transition-colors duration-300">
@@ -305,8 +322,36 @@ export default function AdminPage() {
                     </div>
                   </div>
                 </CardHeader>
-                <CardContent>
-                  {list.length === 0 ? (
+                <CardContent className="relative">
+                  {showOverlay && <LoadingOverlay />}
+                  {showSkeleton ? (
+                    <div className="rounded-md border">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead className="text-center">名称</TableHead>
+                            <TableHead className="text-center">状态</TableHead>
+                            <TableHead className="text-center">URL</TableHead>
+                            <TableHead className="text-center">分组</TableHead>
+                            <TableHead className="text-center">最近检查</TableHead>
+                            <TableHead className="text-center">操作</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {Array.from({ length: 5 }).map((_, i) => (
+                            <TableRow key={i}>
+                              <TableCell><Skeleton className="h-4 w-[100px] mx-auto" /></TableCell>
+                              <TableCell><Skeleton className="h-6 w-[60px] mx-auto rounded-full" /></TableCell>
+                              <TableCell><Skeleton className="h-4 w-[150px] mx-auto" /></TableCell>
+                              <TableCell><Skeleton className="h-6 w-[80px] mx-auto rounded-full" /></TableCell>
+                              <TableCell><Skeleton className="h-4 w-[150px] mx-auto" /></TableCell>
+                              <TableCell><div className="flex gap-2 justify-center"><Skeleton className="h-8 w-8" /><Skeleton className="h-8 w-8" /></div></TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  ) : list.length === 0 ? (
                     <Alert>
                       <AlertTitle>暂无监控项</AlertTitle>
                       <AlertDescription>点击右上方“新建监控”以添加站点监控。</AlertDescription>
@@ -316,36 +361,46 @@ export default function AdminPage() {
                       <Table>
                         <TableHeader>
                           <TableRow>
-                            <TableHead>名称</TableHead>
-                            <TableHead>状态</TableHead>
-                            <TableHead>URL</TableHead>
-                            <TableHead>分组</TableHead>
-                            <TableHead>最近检查</TableHead>
-                            <TableHead>操作</TableHead>
+                            <TableHead className="text-center">名称</TableHead>
+                            <TableHead className="text-center">状态</TableHead>
+                            <TableHead className="text-center">URL</TableHead>
+                            <TableHead className="text-center">分组</TableHead>
+                            <TableHead className="text-center">最近检查</TableHead>
+                            <TableHead className="text-center">操作</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
-                          {list.map((r) => {
+                          {list.map((r, index) => {
                             const g = groups.find(x => x.id === r.group_id)
                             return (
-                              <TableRow key={r.id}>
-                                <TableCell className="font-medium">{r.name}</TableCell>
-                                <TableCell>
-                                  <Badge variant={r.last_online ? "default" : "destructive"} className={r.last_online ? "bg-green-600" : ""}>
-                                    {r.last_online ? '在线' : '离线'}
-                                  </Badge>
-                                </TableCell>
-                                <TableCell className="max-w-[200px] truncate">{r.url}</TableCell>
-                                <TableCell>
-                                  {g ? (
-                                    <Badge variant="outline" style={{ backgroundColor: g.color, color: g.color ? '#fff' : undefined, borderColor: g.color || undefined }}>
-                                      {g.icon ? `${g.icon} ` : ''}{g.name}
+                              <TableRow 
+                                key={r.id}
+                                className="animate-in fade-in slide-in-from-bottom-2 duration-300 fill-mode-both"
+                                style={{ animationDelay: `${index * 50}ms` }}
+                              >
+                                <TableCell className="font-medium text-center">{r.name}</TableCell>
+                                <TableCell className="text-center">
+                                  <div className="flex justify-center">
+                                    <Badge variant={r.last_online ? "default" : "destructive"} className={r.last_online ? "bg-green-600" : ""}>
+                                      {r.last_online ? '在线' : '离线'}
                                     </Badge>
-                                  ) : '-'}
+                                  </div>
                                 </TableCell>
-                                <TableCell>{r.last_checked_at ? new Date(r.last_checked_at).toLocaleString() : '-'}</TableCell>
-                                <TableCell>
-                                  <div className="flex space-x-2">
+                                <TableCell className="max-w-[200px] text-center">
+                                  <div className="truncate mx-auto">{r.url}</div>
+                                </TableCell>
+                                <TableCell className="text-center">
+                                  <div className="flex justify-center">
+                                    {g ? (
+                                      <Badge variant="outline" style={{ backgroundColor: g.color, color: g.color ? '#fff' : undefined, borderColor: g.color || undefined }}>
+                                        {g.icon ? `${g.icon} ` : ''}{g.name}
+                                      </Badge>
+                                    ) : '-'}
+                                  </div>
+                                </TableCell>
+                                <TableCell className="text-center">{r.last_checked_at ? new Date(r.last_checked_at).toLocaleString() : '-'}</TableCell>
+                                <TableCell className="text-center">
+                                  <div className="flex space-x-2 justify-center">
                                     <Button size="sm" variant="outline" onClick={() => { setEditingMonitor(r); setShowMonitorForm(true) }}>
                                       <Edit className="h-4 w-4" />
                                     </Button>

@@ -41,14 +41,14 @@ export function MonitorList({ monitors, groups, latest, sslMap, loading, onDetai
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>名称</TableHead>
+              <TableHead className="text-center">名称</TableHead>
               <TableHead className="text-center">状态</TableHead>
               <TableHead className="text-center">分组</TableHead>
               <TableHead className="text-center">响应</TableHead>
               <TableHead className="text-center">30天状态</TableHead>
               <TableHead className="text-center">SSL剩余</TableHead>
-              <TableHead>最近检查</TableHead>
-              <TableHead>操作</TableHead>
+              <TableHead className="text-center">最近检查</TableHead>
+              <TableHead className="text-center">操作</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -75,8 +75,8 @@ export function MonitorList({ monitors, groups, latest, sslMap, loading, onDetai
                   className="animate-in fade-in slide-in-from-bottom-2 duration-300 fill-mode-both"
                   style={{ animationDelay: `${index * 50}ms` }}
                 >
-                  <TableCell className="font-medium">
-                    <a href={r.url} target="_blank" rel="noopener noreferrer" className="hover:text-primary hover:underline transition-colors flex items-center gap-1 w-fit">
+                  <TableCell className="font-medium text-center">
+                    <a href={r.url} target="_blank" rel="noopener noreferrer" className="hover:text-primary hover:underline transition-colors flex items-center gap-1 w-fit mx-auto">
                       {r.name}
                       <ExternalLink className="h-3 w-3 opacity-50" />
                     </a>
@@ -127,11 +127,11 @@ export function MonitorList({ monitors, groups, latest, sslMap, loading, onDetai
                   <TableCell className="text-center">
                     {ssl && typeof ssl.days_left === 'number' ? `${ssl.days_left}天` : '-'}
                   </TableCell>
-                  <TableCell>
+                  <TableCell className="text-center">
                     {r.last_checked_at ? new Date(r.last_checked_at).toLocaleString() : '-'}
                   </TableCell>
-                  <TableCell>
-                    <div className="flex space-x-2">
+                  <TableCell className="text-center">
+                    <div className="flex space-x-2 justify-center">
                       <Button variant="outline" size="sm" onClick={() => onDetail(r)}>详情</Button>
                     </div>
                   </TableCell>
