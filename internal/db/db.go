@@ -2,12 +2,31 @@ package db
 
 import (
 	"database/sql"
+	"time"
 
 	_ "github.com/lib/pq"
 )
 
+// Open opens a database connection with optimized pool settings
 func Open(dsn string) (*sql.DB, error) {
-	return sql.Open("postgres", dsn)
+	db, err := sql.Open("postgres", dsn)
+	if err != nil {
+		return nil, err
+	}
+
+	// Configure connection pool
+	db.SetMaxOpenConns(25)                 // Maximum open connections
+	db.SetMaxIdleConns(10)                 // Maximum idle connections
+	db.SetConnMaxLifetime(5 * time.Minute) // Connection max lifetime
+	db.SetConnMaxIdleTime(1 * time.Minute) // Idle connection max lifetime
+
+	// Verify connection
+	if err := db.Ping(); err != nil {
+		db.Close()
+		return nil, err
+	}
+
+	return db, nil
 }
 
 func Migrate(db *sql.DB) error {
@@ -74,6 +93,16 @@ func Migrate(db *sql.DB) error {
 			verify_expires TIMESTAMPTZ
 		);`,
 		`CREATE INDEX IF NOT EXISTS idx_sub_monitor ON monitor_subscriptions(monitor_id);`,
+		// Performance indexes
+		`CREATE INDEX IF NOT EXISTS idx_monitor_results_monitor_id ON monitor_results(monitor_id);`,
+		`CREATE INDEX IF NOT EXISTS idx_monitor_results_checked_at ON monitor_results(checked_at DESC);`,
+		`CREATE INDEX IF NOT EXISTS idx_monitor_results_monitor_checked ON monitor_results(monitor_id, checked_at DESC);`,
+		`CREATE INDEX IF NOT EXISTS idx_notifications_monitor_id ON notifications(monitor_id);`,
+		`CREATE INDEX IF NOT EXISTS idx_notifications_created_at ON notifications(created_at DESC);`,
+		`CREATE INDEX IF NOT EXISTS idx_notifications_type ON notifications(type);`,
+		`CREATE INDEX IF NOT EXISTS idx_sub_email ON monitor_subscriptions(email);`,
+		`CREATE INDEX IF NOT EXISTS idx_sub_verify_token ON monitor_subscriptions(verify_token) WHERE verify_token IS NOT NULL;`,
+		`CREATE INDEX IF NOT EXISTS idx_monitors_group_id ON monitors(group_id);`,
 		`CREATE TABLE IF NOT EXISTS admin_users (
 			id SERIAL PRIMARY KEY,
 			email TEXT UNIQUE NOT NULL,
@@ -102,6 +131,8 @@ func Migrate(db *sql.DB) error {
 		`ALTER TABLE app_settings ADD COLUMN IF NOT EXISTS retention_days INT;`,
 		`ALTER TABLE app_settings ADD COLUMN IF NOT EXISTS flap_threshold INT;`,
 		`ALTER TABLE app_settings ADD COLUMN IF NOT EXISTS to_emails TEXT;`,
+		`ALTER TABLE app_settings ADD COLUMN IF NOT EXISTS show_system_status BOOLEAN DEFAULT FALSE;`,
+		`ALTER TABLE app_settings ADD COLUMN IF NOT EXISTS status_monitor_id BIGINT;`,
 		// Alter existing columns to BIGINT for snowflake IDs (safe if already BIGINT)
 		`DO $$
 		BEGIN

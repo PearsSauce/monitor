@@ -1,13 +1,15 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { Monitor, SSLInfo } from '@/types'
 import { getHistory, getSSL } from '@/lib/api'
+import { useExport } from '@/hooks'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
-import { ExternalLink, Clock, Globe, ShieldCheck, ShieldAlert, Activity } from 'lucide-react'
+import { ExternalLink, Clock, Globe, ShieldCheck, ShieldAlert, Activity, Download, Loader2 } from 'lucide-react'
 
 interface MonitorDetailProps {
   monitor: Monitor | null
@@ -132,8 +134,18 @@ const CustomTooltip = ({ active, payload }: { active?: boolean; payload?: { payl
 
 export function MonitorDetail({ monitor, open, onClose }: MonitorDetailProps) {
   type ChartPoint = AggPoint | RawPoint
-  const [history, setHistory] = useState<ChartPoint[]>([])
+  const [rawHistory, setRawHistory] = useState<RawPoint[]>([])
   const [ssl, setSsl] = useState<SSLInfo | null>(null)
+  const { exportHistory, isExporting } = useExport()
+
+  // Memoize chart data aggregation
+  const history = useMemo<ChartPoint[]>(() => {
+    if (rawHistory.length === 0) return []
+    const aggregated = aggregateHistory(rawHistory, 5)
+    const hasAgg = aggregated.some(pt => typeof pt.ms === 'number')
+    const hasRaw = rawHistory.some(pt => typeof pt.ms === 'number')
+    return hasAgg ? aggregated : hasRaw ? rawHistory : []
+  }, [rawHistory])
 
   useEffect(() => {
     if (monitor && open) {
@@ -156,11 +168,7 @@ export function MonitorDetail({ monitor, open, onClose }: MonitorDetailProps) {
             }
           })
           .sort((a, b) => a.ts - b.ts)
-        const aggregated = aggregateHistory(formatted, 5)
-        const hasAgg = aggregated.some(pt => typeof pt.ms === 'number')
-        const hasRaw = formatted.some(pt => typeof pt.ms === 'number')
-        const chartData: ChartPoint[] = hasAgg ? aggregated : hasRaw ? formatted : []
-        setHistory(chartData)
+        setRawHistory(formatted)
         setSsl(s)
       })
     }
@@ -232,9 +240,24 @@ export function MonitorDetail({ monitor, open, onClose }: MonitorDetailProps) {
 
           {/* Response Time Chart */}
           <div className="space-y-2">
-            <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-              <Clock className="h-4 w-4" />
-              <span>响应时间 (24h)</span>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+                <Clock className="h-4 w-4" />
+                <span>响应时间 (24h)</span>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => monitor && exportHistory(monitor.id, 30, monitor.name)}
+                disabled={isExporting}
+              >
+                {isExporting ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <Download className="h-4 w-4 mr-2" />
+                )}
+                导出CSV
+              </Button>
             </div>
             <div className="h-[250px] w-full rounded-lg border p-4 bg-card">
               {history.length > 0 ? (

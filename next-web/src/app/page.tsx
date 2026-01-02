@@ -25,7 +25,7 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(false)
   const [list, setList] = useState<Monitor[]>([])
   const [groups, setGroups] = useState<Group[]>([])
-  const [sslMap, setSslMap] = useState<Record<number, SSLInfo>>({})
+  const [sslMap, setSslMap] = useState<Record<number, SSLInfo | null>>({})
   const [latest, setLatest] = useState<Record<number, number>>({})
   const [notices, setNotices] = useState<NotificationItem[]>([])
   const [noticeTotal, setNoticeTotal] = useState(0)
@@ -57,7 +57,7 @@ export default function Dashboard() {
       const gs = await getGroups()
       setGroups(Array.isArray(gs) ? gs : [])
       
-      const sslEntries: Record<number, SSLInfo> = {}
+      const sslEntries: Record<number, SSLInfo | null> = {}
       await Promise.all((Array.isArray(data) ? data : []).map(async (m: Monitor) => { 
         sslEntries[m.id] = await getSSL(m.id).catch(()=>null) 
       }))

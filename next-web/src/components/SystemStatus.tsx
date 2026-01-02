@@ -1,44 +1,80 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { cn } from '@/lib/utils'
+import { getSettings, getLatestResult } from '@/lib/api'
 
-interface StatusResponse {
-  checked_at: string
-  online: boolean
-  status_code: number
-  response_ms: number
-  error: string
+interface SystemStatusProps {
+  className?: string
 }
 
-export function SystemStatus() {
+export function SystemStatus({ className }: SystemStatusProps) {
+  const [enabled, setEnabled] = useState(false)
+  const [monitorId, setMonitorId] = useState<number | null>(null)
   const [status, setStatus] = useState<'loading' | 'online' | 'offline' | 'error'>('loading')
   const [responseMs, setResponseMs] = useState<number>(0)
+  const esRef = useRef<EventSource | null>(null)
 
+  // Load settings on mount
   useEffect(() => {
-    const fetchStatus = async () => {
-      try {
-        const res = await fetch('http://localhost:3000/api/monitors/256394312759680/latest')
-        if (!res.ok) throw new Error('Failed to fetch')
-        const data: StatusResponse = await res.json()
-        setStatus(data.online ? 'online' : 'offline')
-        setResponseMs(data.response_ms)
-      } catch (error) {
-        console.error('Failed to fetch system status:', error)
-        setStatus('error')
-      }
-    }
-
-    fetchStatus()
-    // Optional: Poll every 60 seconds
-    const interval = setInterval(fetchStatus, 60000)
-    return () => clearInterval(interval)
+    getSettings().then(s => {
+      setEnabled(s.show_system_status || false)
+      setMonitorId(s.status_monitor_id || null)
+    }).catch(() => {
+      setEnabled(false)
+    })
   }, [])
 
-  if (status === 'loading' || status === 'error') return null
+  // Fetch initial status and setup SSE
+  useEffect(() => {
+    if (!enabled || !monitorId) {
+      setStatus('loading')
+      return
+    }
+
+    // Fetch initial status
+    getLatestResult(monitorId).then(data => {
+      if (data) {
+        setStatus(data.online ? 'online' : 'offline')
+        setResponseMs(data.response_ms || 0)
+      } else {
+        setStatus('error')
+      }
+    }).catch(() => {
+      setStatus('error')
+    })
+
+    // Setup SSE for real-time updates
+    const es = new EventSource('/api/events')
+    esRef.current = es
+
+    es.onmessage = (e) => {
+      try {
+        const ev = JSON.parse(e.data)
+        if (ev.MonitorID === monitorId) {
+          setStatus(ev.Online ? 'online' : 'offline')
+          setResponseMs(ev.ResponseMs || 0)
+        }
+      } catch {}
+    }
+
+    es.onerror = () => {
+      // SSE connection error, keep current status
+    }
+
+    return () => {
+      es.close()
+      esRef.current = null
+    }
+  }, [enabled, monitorId])
+
+  // Don't render if disabled or no monitor selected
+  if (!enabled || !monitorId || status === 'loading' || status === 'error') {
+    return null
+  }
 
   return (
-    <div className="flex items-center gap-2">
+    <div className={cn("flex items-center gap-2", className)}>
       <div className="relative flex h-2 w-2">
         {status === 'online' && (
           <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
