@@ -74,27 +74,33 @@ export function SystemStatus({ className }: SystemStatusProps) {
   }
 
   return (
-    <div className={cn("flex items-center gap-2", className)}>
-      <div className="relative flex h-2 w-2">
-        {status === 'online' && (
-          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-        )}
+    <>
+      <div className="h-3 w-[1px] bg-slate-200 dark:bg-neutral-800" />
+      <div className={cn("flex items-center gap-2", className)}>
+        <div className="relative flex h-2 w-2">
+          {status === 'online' && (
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+          )}
+          <span className={cn(
+            "relative inline-flex rounded-full h-2 w-2",
+            status === 'online' ? "bg-green-500" : "bg-red-500"
+          )}></span>
+        </div>
         <span className={cn(
-          "relative inline-flex rounded-full h-2 w-2",
-          status === 'online' ? "bg-green-500" : "bg-red-500"
-        )}></span>
-      </div>
-      <span className={cn(
-        "text-xs font-medium",
-        status === 'online' ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"
-      )}>
-        {status === 'online' ? '正常运行' : '运行异常'}
-      </span>
-      {status === 'online' && responseMs > 0 && (
-        <span className="text-[10px] text-muted-foreground border-l pl-2 border-slate-200 dark:border-neutral-700">
-          {responseMs}ms
+          "text-xs font-medium",
+          status === 'online' ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"
+        )}>
+          {status === 'online' ? '正常运行' : '运行异常'}
         </span>
-      )}
-    </div>
+        {status === 'online' && responseMs > 0 && (
+          <>
+            <div className="h-3 w-[1px] bg-slate-200 dark:bg-neutral-800" />
+            <span className="text-[10px] text-muted-foreground">
+              {responseMs}ms
+            </span>
+          </>
+        )}
+      </div>
+    </>
   )
 }

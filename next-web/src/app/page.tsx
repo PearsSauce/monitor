@@ -302,7 +302,6 @@ export default function Dashboard() {
               <Github className="h-4 w-4 text-slate-500 group-hover:text-foreground transition-colors" />
               <span className="font-medium">GitHub</span>
             </Link>
-            <div className="h-3 w-[1px] bg-slate-200 dark:bg-neutral-800" />
             <SystemStatus />
           </div>
         </div>
