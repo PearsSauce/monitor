@@ -51,10 +51,37 @@ type HistoryItem struct {
 	Error      string `json:"error"`
 }
 
+// MonitorExportItem represents a monitor with its history for export
+type MonitorExportItem struct {
+	Name              string        `json:"name"`
+	URL               string        `json:"url"`
+	Method            string        `json:"method"`
+	HeadersJSON       string        `json:"headers_json"`
+	Body              string        `json:"body"`
+	ExpectedStatusMin int           `json:"expected_status_min"`
+	ExpectedStatusMax int           `json:"expected_status_max"`
+	Keyword           string        `json:"keyword"`
+	GroupID           *int          `json:"group_id,omitempty"`
+	IntervalSeconds   int           `json:"interval_seconds"`
+	History           []HistoryItem `json:"history"`
+}
+
+// ExportResponse represents the full export data
+type ExportResponse struct {
+	Version    string              `json:"version"`
+	ExportedAt string              `json:"exported_at"`
+	Monitors   []MonitorExportItem `json:"monitors"`
+}
+
 // handleMonitors handles GET/POST /api/monitors
 func (s *Server) handleMonitors(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
+		// Check if export is requested
+		if r.URL.Query().Get("export") == "true" {
+			s.exportMonitors(w, r)
+			return
+		}
 		s.listMonitors(w, r)
 	case http.MethodPost:
 		s.createMonitor(w, r)
@@ -71,6 +98,91 @@ func (s *Server) listMonitors(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, ms)
+}
+
+func (s *Server) exportMonitors(w http.ResponseWriter, r *http.Request) {
+	if !s.requireAuth(r) {
+		unauthorized(w)
+		return
+	}
+
+	// Get days parameter, default to 30
+	days := 30
+	if v := r.URL.Query().Get("days"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 && n <= 365 {
+			days = n
+		}
+	}
+
+	// Get all monitors
+	ms, err := s.svc.ListMonitors()
+	if err != nil {
+		s.logger.Error("获取监控列表失败", "error", err)
+		databaseError(w, err)
+		return
+	}
+
+	var exportItems []MonitorExportItem
+	for _, m := range ms {
+		// Get history for each monitor
+		rows, err := s.svc.DB().Query(`SELECT checked_at, online, status_code, response_ms, error 
+			FROM monitor_results WHERE monitor_id=$1 AND checked_at>=NOW() - ($2||' days')::interval
+			ORDER BY checked_at DESC`, m.ID, days)
+		if err != nil {
+			s.logger.Error("获取监控历史失败", "monitor_id", m.ID, "error", err)
+			continue
+		}
+
+		var history []HistoryItem
+		for rows.Next() {
+			var it HistoryItem
+			var errStr sql.NullString
+			var t time.Time
+			if err := rows.Scan(&t, &it.Online, &it.StatusCode, &it.ResponseMs, &errStr); err != nil {
+				continue
+			}
+			it.CheckedAt = t.Format(time.RFC3339)
+			if errStr.Valid {
+				it.Error = errStr.String
+			}
+			history = append(history, it)
+		}
+		rows.Close()
+
+		if history == nil {
+			history = []HistoryItem{}
+		}
+
+		exportItem := MonitorExportItem{
+			Name:              m.Name,
+			URL:               m.URL,
+			Method:            m.Method,
+			HeadersJSON:       m.HeadersJSON,
+			Body:              m.Body,
+			ExpectedStatusMin: m.ExpectedStatusMin,
+			ExpectedStatusMax: m.ExpectedStatusMax,
+			Keyword:           m.Keyword,
+			IntervalSeconds:   m.IntervalSeconds,
+			History:           history,
+		}
+		if m.GroupID != nil {
+			exportItem.GroupID = m.GroupID
+		}
+		exportItems = append(exportItems, exportItem)
+	}
+
+	if exportItems == nil {
+		exportItems = []MonitorExportItem{}
+	}
+
+	export := ExportResponse{
+		Version:    "1.0",
+		ExportedAt: time.Now().Format(time.RFC3339),
+		Monitors:   exportItems,
+	}
+
+	s.logger.Info("导出监控数据", "monitors", len(exportItems), "days", days)
+	writeJSON(w, export)
 }
 
 func (s *Server) createMonitor(w http.ResponseWriter, r *http.Request) {

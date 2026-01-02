@@ -3,13 +3,10 @@
 import { useEffect, useState, useMemo } from 'react'
 import { Monitor, SSLInfo } from '@/types'
 import { getHistory, getSSL } from '@/lib/api'
-import { useExport } from '@/hooks'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
-import { Skeleton } from '@/components/ui/skeleton'
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
-import { ExternalLink, Clock, Globe, ShieldCheck, ShieldAlert, Activity, Download, Loader2 } from 'lucide-react'
+import { ExternalLink, Clock, Globe, ShieldCheck, ShieldAlert, Activity } from 'lucide-react'
 
 interface MonitorDetailProps {
   monitor: Monitor | null
@@ -136,7 +133,6 @@ export function MonitorDetail({ monitor, open, onClose }: MonitorDetailProps) {
   type ChartPoint = AggPoint | RawPoint
   const [rawHistory, setRawHistory] = useState<RawPoint[]>([])
   const [ssl, setSsl] = useState<SSLInfo | null>(null)
-  const { exportHistory, isExporting } = useExport()
 
   // Memoize chart data aggregation
   const history = useMemo<ChartPoint[]>(() => {
@@ -180,7 +176,7 @@ export function MonitorDetail({ monitor, open, onClose }: MonitorDetailProps) {
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="sm:max-w-[800px]">
+      <DialogContent className="sm:max-w-[800px] overflow-hidden">
         <DialogHeader>
           <div className="flex items-center justify-between mr-8">
             <div className="flex items-center gap-2">
@@ -240,24 +236,9 @@ export function MonitorDetail({ monitor, open, onClose }: MonitorDetailProps) {
 
           {/* Response Time Chart */}
           <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-                <Clock className="h-4 w-4" />
-                <span>响应时间 (24h)</span>
-              </div>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => monitor && exportHistory(monitor.id, 30, monitor.name)}
-                disabled={isExporting}
-              >
-                {isExporting ? (
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                ) : (
-                  <Download className="h-4 w-4 mr-2" />
-                )}
-                导出CSV
-              </Button>
+            <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+              <Clock className="h-4 w-4" />
+              <span>响应时间 (24h)</span>
             </div>
             <div className="h-[250px] w-full rounded-lg border p-4 bg-card">
               {history.length > 0 ? (
