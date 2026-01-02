@@ -27,7 +27,7 @@ export function WebsiteTab({ form, onSubmit, monitors = [] }: WebsiteTabProps) {
   const showStatus = form.watch('show_system_status')
 
   return (
-    <div className="space-y-6 max-w-2xl">
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
       <Card>
         <CardHeader>
           <CardTitle>基础信息</CardTitle>
