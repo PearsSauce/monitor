@@ -298,7 +298,7 @@ export default function Dashboard() {
             <span>&copy; {new Date().getFullYear()} {siteName}. All rights reserved.</span>
           </div>
           <div className="flex items-center gap-4 md:gap-6">
-            <Link href="https://github.com/chenlong-dev/monitor" target="_blank" rel="noopener noreferrer" className="hover:text-foreground transition-colors flex items-center gap-1.5 group">
+            <Link href="https://github.com/PearsSauce/monitor" target="_blank" rel="noopener noreferrer" className="hover:text-foreground transition-colors flex items-center gap-1.5 group">
               <Github className="h-4 w-4 text-slate-500 group-hover:text-foreground transition-colors" />
               <span className="font-medium">GitHub</span>
             </Link>

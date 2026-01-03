@@ -59,6 +59,7 @@ const notifySchema = z.object({
   to_emails: z.string().optional(),
 })
 
+
 export default function AdminPage() {
   const router = useRouter()
   const [mounted, setMounted] = useState(false)
@@ -98,7 +99,7 @@ export default function AdminPage() {
       websiteForm.reset({ site_name: s.site_name || '服务监控系统', subtitle: s.subtitle || '', tab_subtitle: s.tab_subtitle || '', show_system_status: s.show_system_status || false, status_monitor_id: s.status_monitor_id || undefined })
       setSiteName(s.site_name || '服务监控系统')
       setSubtitle(s.subtitle || '')
-      if (s.tab_subtitle) document.title = s.site_name + ' - ' + s.tab_subtitle
+      if (s.tab_subtitle) document.title = `${s.site_name} - ${s.tab_subtitle}`
       else document.title = s.site_name
       dataForm.reset({ history_days_frontend: s.history_days_frontend || 30, retention_days: s.retention_days || 30, check_interval_seconds: s.check_interval_seconds || 60, debounce_seconds: s.debounce_seconds || 0, flap_threshold: s.flap_threshold || 1 })
       notifyForm.reset({ enable_notifications: s.enable_notifications ?? true, notify_events: s.notify_events || ['online', 'offline', 'ssl_expiry'], smtp_server: s.smtp_server || '', smtp_port: s.smtp_port || 587, smtp_user: s.smtp_user || '', smtp_password: s.smtp_password || '', from_email: s.from_email || '', to_emails: s.to_emails || '' })
@@ -122,7 +123,7 @@ export default function AdminPage() {
   const sendTestNotify = async () => {
     if (!testMonitor) { toast.warning('请选择站点'); return }
     try {
-      const res = await fetch('/api/notifications/test', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + getToken() }, body: JSON.stringify({ type: testType, monitor_id: Number(testMonitor) }) })
+      const res = await fetch('/api/notifications/test', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getToken()}` }, body: JSON.stringify({ type: testType, monitor_id: Number(testMonitor) }) })
       if (!res.ok) throw new Error('测试通知发送失败')
       toast.success('测试通知已发送')
     } catch (e: any) { toast.error(e.message) }
@@ -132,6 +133,7 @@ export default function AdminPage() {
   const confirmDeleteMonitor = async () => { if (!monitorToDelete) return; try { await deleteMonitor(monitorToDelete.id); toast.success('监控项已删除'); fetchData(); setMonitorToDelete(null) } catch (e: any) { toast.error(e.message) } }
 
   if (!mounted) return null
+
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-black transition-colors duration-300">
