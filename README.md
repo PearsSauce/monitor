@@ -473,6 +473,3 @@ proxy_set_header Connection "upgrade";
 - 管理后台建议配合防火墙、Cloudflare Access 或 Nginx Basic Auth 做额外保护。
 - 节点安装命令包含该节点明文 token，只在可信终端执行，不要公开粘贴。
 
-## License
-
-请根据你的发布计划补充 License 文件。
