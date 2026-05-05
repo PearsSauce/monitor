@@ -42,14 +42,20 @@ curl -fsSL https://raw.githubusercontent.com/dingdingpw/monitor/main/release/ins
 ARM64：
 ```bash
 https://raw.githubusercontent.com/dingdingpw/monitor/main/release/vps-server-linux-arm64
-ARMv7：
 ```
+
+ARMv7：
+
 ```bash
 https://raw.githubusercontent.com/dingdingpw/monitor/main/release/vps-server-linux-armv7
+```
+
 386：
+
 ```bash
 https://raw.githubusercontent.com/dingdingpw/monitor/main/release/vps-server-linux-386
 ```
+
 带参数一次性安装，避免交互：
 ```bash
 curl -fsSL https://raw.githubusercontent.com/dingdingpw/monitor/main/release/install-server-linux.sh | sudo sh -s -- \
@@ -59,6 +65,7 @@ curl -fsSL https://raw.githubusercontent.com/dingdingpw/monitor/main/release/ins
   --auth-secret "换成一串随机密钥" \
   --bin-url "https://raw.githubusercontent.com/dingdingpw/monitor/main/release/vps-server-linux-amd64"
 ```
+
 安装完看状态：
 ```bash
 sudo systemctl status vps-server
