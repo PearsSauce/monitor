@@ -1,6 +1,7 @@
 package server
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -265,6 +266,137 @@ func TestDeletePostChecksAdminBeforeBody(t *testing.T) {
 	}
 }
 
+func TestAdminSettingsRequiresAuthOriginAndPersists(t *testing.T) {
+	s := newTestServer(t)
+
+	unauthorizedReq := httptest.NewRequest(http.MethodGet, "https://monitor.example.com/api/admin/settings", nil)
+	unauthorizedResp := httptest.NewRecorder()
+	s.handleAdminSettings(unauthorizedResp, unauthorizedReq)
+	if unauthorizedResp.Code != http.StatusUnauthorized {
+		t.Fatalf("unauthorized settings status = %d body = %s", unauthorizedResp.Code, unauthorizedResp.Body.String())
+	}
+
+	token, err := s.sessions.Create()
+	if err != nil {
+		t.Fatal(err)
+	}
+	badOriginReq := adminRequestWithBody(http.MethodPost, "https://monitor.example.com/api/admin/settings", token, "{")
+	badOriginReq.Header.Set("Origin", "https://evil.example.com")
+	badOriginResp := httptest.NewRecorder()
+	s.handleAdminSettings(badOriginResp, badOriginReq)
+	if badOriginResp.Code != http.StatusForbidden {
+		t.Fatalf("bad-origin settings status = %d body = %s", badOriginResp.Code, badOriginResp.Body.String())
+	}
+	if got := s.store.GetSettings().SiteName; got != "Monitor Party" {
+		t.Fatalf("bad-origin settings changed site name to %q", got)
+	}
+
+	okReq := adminRequestWithBody(http.MethodPost, "https://monitor.example.com/api/admin/settings", token, `{"site_name":"  Ops Console  "}`)
+	okReq.Header.Set("Origin", "https://monitor.example.com")
+	okResp := httptest.NewRecorder()
+	s.handleAdminSettings(okResp, okReq)
+	if okResp.Code != http.StatusOK {
+		t.Fatalf("valid settings status = %d body = %s", okResp.Code, okResp.Body.String())
+	}
+	if got := s.store.GetSettings().SiteName; got != "Ops Console" {
+		t.Fatalf("saved site name = %q", got)
+	}
+
+	getReq := authedAdminRequest(http.MethodGet, "https://monitor.example.com/api/admin/settings", token)
+	getResp := httptest.NewRecorder()
+	s.handleAdminSettings(getResp, getReq)
+	if getResp.Code != http.StatusOK {
+		t.Fatalf("get settings status = %d body = %s", getResp.Code, getResp.Body.String())
+	}
+	var settings Settings
+	decodeJSONResponse(t, getResp, &settings)
+	if settings.SiteName != "Ops Console" {
+		t.Fatalf("settings response = %#v", settings)
+	}
+}
+
+func TestAdminNodeBackupEndpointsRequireAuthOrigin(t *testing.T) {
+	s := newTestServer(t)
+	const nodeID = "CN-admin-001"
+	const importedNodeID = "US-admin-002"
+
+	unauthorizedReq := httptest.NewRequest(http.MethodGet, "https://monitor.example.com/api/admin/nodes", nil)
+	unauthorizedResp := httptest.NewRecorder()
+	s.handleAdminNodes(unauthorizedResp, unauthorizedReq)
+	if unauthorizedResp.Code != http.StatusUnauthorized {
+		t.Fatalf("unauthorized nodes status = %d body = %s", unauthorizedResp.Code, unauthorizedResp.Body.String())
+	}
+
+	token, err := s.sessions.Create()
+	if err != nil {
+		t.Fatal(err)
+	}
+	badOriginAddReq := adminRequestWithBody(http.MethodPost, "https://monitor.example.com/api/admin/nodes", token, "{")
+	badOriginAddReq.Header.Set("Origin", "https://evil.example.com")
+	badOriginAddResp := httptest.NewRecorder()
+	s.handleAdminNodes(badOriginAddResp, badOriginAddReq)
+	if badOriginAddResp.Code != http.StatusForbidden {
+		t.Fatalf("bad-origin node add status = %d body = %s", badOriginAddResp.Code, badOriginAddResp.Body.String())
+	}
+	if got := s.store.ExportNodes().Nodes; len(got) != 0 {
+		t.Fatalf("bad-origin node add wrote nodes: %#v", got)
+	}
+
+	okAddReq := adminRequestWithBody(http.MethodPost, "https://monitor.example.com/api/admin/nodes", token, `{"node_id":"`+nodeID+`"}`)
+	okAddReq.Header.Set("Origin", "https://monitor.example.com")
+	okAddResp := httptest.NewRecorder()
+	s.handleAdminNodes(okAddResp, okAddReq)
+	if okAddResp.Code != http.StatusOK {
+		t.Fatalf("valid node add status = %d body = %s", okAddResp.Code, okAddResp.Body.String())
+	}
+
+	exportReq := authedAdminRequest(http.MethodGet, "https://monitor.example.com/api/admin/nodes/export", token)
+	exportResp := httptest.NewRecorder()
+	s.handleAdminNodesExport(exportResp, exportReq)
+	if exportResp.Code != http.StatusOK {
+		t.Fatalf("export status = %d body = %s", exportResp.Code, exportResp.Body.String())
+	}
+	if got := exportResp.Header().Get("Content-Disposition"); got != "attachment; filename=monitor-nodes.json" {
+		t.Fatalf("content disposition = %q", got)
+	}
+	var backup NodeBackup
+	decodeJSONResponse(t, exportResp, &backup)
+	if len(backup.Nodes) != 1 || backup.Nodes[0].NodeID != nodeID {
+		t.Fatalf("export backup = %#v", backup)
+	}
+
+	badOriginImportReq := adminRequestWithBody(http.MethodPost, "https://monitor.example.com/api/admin/nodes/import", token, "{")
+	badOriginImportReq.Header.Set("Origin", "https://evil.example.com")
+	badOriginImportResp := httptest.NewRecorder()
+	s.handleAdminNodesImport(badOriginImportResp, badOriginImportReq)
+	if badOriginImportResp.Code != http.StatusForbidden {
+		t.Fatalf("bad-origin node import status = %d body = %s", badOriginImportResp.Code, badOriginImportResp.Body.String())
+	}
+	if got := s.store.ExportNodes().Nodes; len(got) != 1 {
+		t.Fatalf("bad-origin node import changed nodes: %#v", got)
+	}
+
+	okImportReq := adminRequestWithBody(http.MethodPost, "https://monitor.example.com/api/admin/nodes/import", token, `{"version":1,"nodes":[{"node_id":"`+importedNodeID+`","info":{"seller":"seller","traffic_reset_day":9}}]}`)
+	okImportReq.Header.Set("Origin", "https://monitor.example.com")
+	okImportResp := httptest.NewRecorder()
+	s.handleAdminNodesImport(okImportResp, okImportReq)
+	if okImportResp.Code != http.StatusOK {
+		t.Fatalf("valid node import status = %d body = %s", okImportResp.Code, okImportResp.Body.String())
+	}
+	var importResult map[string]int
+	decodeJSONResponse(t, okImportResp, &importResult)
+	if importResult["imported"] != 1 {
+		t.Fatalf("import result = %#v", importResult)
+	}
+	nodes := s.store.ExportNodes().Nodes
+	if len(nodes) != 2 {
+		t.Fatalf("nodes after import = %#v", nodes)
+	}
+	if nodes[1].NodeID != importedNodeID || nodes[1].Info.Seller != "seller" || nodes[1].Info.TrafficResetDay != 9 {
+		t.Fatalf("imported node = %#v", nodes[1])
+	}
+}
+
 func TestAgentAuthorizationRequiresBearerToken(t *testing.T) {
 	s := newTestServer(t)
 	const nodeID = "CN-agent-001"
@@ -482,6 +614,13 @@ func adminRequestWithBody(method, target, token, body string) *http.Request {
 		req.AddCookie(&http.Cookie{Name: "monitor_admin", Value: token})
 	}
 	return req
+}
+
+func decodeJSONResponse(t *testing.T, resp *httptest.ResponseRecorder, value any) {
+	t.Helper()
+	if err := json.NewDecoder(resp.Body).Decode(value); err != nil {
+		t.Fatalf("decode response body %q: %v", resp.Body.String(), err)
+	}
 }
 
 func sampleMetrics(nodeID string, rxBytes, txBytes uint64) agent.Metrics {
