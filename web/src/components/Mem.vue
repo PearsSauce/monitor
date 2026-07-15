@@ -1,7 +1,7 @@
 <script setup>
 import highcharts from 'highcharts'
 import moment from 'moment'
-import {inject, onMounted, ref, watch} from 'vue'
+import {onMounted, onUnmounted, ref, watch} from 'vue'
 import {useI18n} from "vue-i18n";
 
 const { t } = useI18n()
@@ -16,6 +16,8 @@ const props = defineProps({
 
 const chartRef = ref()
 const chart = ref(null)
+
+const chartData = (data) => (data || []).slice(-60)
 
 const formatUnit = (value) => {
   return t('chart-memory')+': ' + formatMemSize(value)
@@ -131,7 +133,7 @@ const options = ref({
   series: [{
     color: '#5541b8',
     fillColor: '#5541b820',
-    data: props.data,
+    data: chartData(props.data),
     showInLegend: false,
     pointInterval: 1000
   }],
@@ -141,20 +143,31 @@ const options = ref({
 })
 
 const updateOptions = (data) => {
-  // const seriesData = [...options.value.series[0].data, data]
-  chart.value.series[0].addPoint(data)
+  if (!chart.value || !data) return
+  const series = chart.value.series[0]
+  series.addPoint(data, true, series.data.length >= 60)
 }
 
-let interval = null
+const setSeriesData = (data) => {
+  if (!chart.value) return
+  chart.value.series[0].setData(chartData(data), true, false, false)
+}
 
 onMounted(() => {
   highcharts.setOptions({ global: { useUTC: false } });
   options.value.chart.renderTo = chartRef.value
   chart.value = highcharts.chart(options.value);
+})
 
-  interval = setInterval(() => {
-    updateOptions(props.data[props.data.length - 1])
-  }, 1000)
+onUnmounted(() => {
+  chart.value?.destroy()
+  chart.value = null
+})
+
+watch(() => props.data, setSeriesData, { deep: true })
+watch(() => props.max, (max) => {
+  if (!chart.value) return
+  chart.value.yAxis[0].update({ max }, true)
 })
 
 defineExpose({

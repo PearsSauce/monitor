@@ -4,6 +4,7 @@ import (
 	"log"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"vps-agent/internal/server"
@@ -19,6 +20,7 @@ func main() {
 		StoreDriver: os.Getenv("STORE_DRIVER"),
 		DBPath:      os.Getenv("DB_PATH"),
 		PublicURL:   os.Getenv("PUBLIC_URL"),
+		CORSOrigins: envList("CORS_ORIGINS"),
 		OfflineWait: envDuration("OFFLINE_WAIT", 60*time.Second),
 		MaxNodes:    envInt("MAX_NODES", 2000),
 	}
@@ -62,4 +64,20 @@ func envInt(key string, fallback int) int {
 		return fallback
 	}
 	return n
+}
+
+func envList(key string) []string {
+	value := os.Getenv(key)
+	if value == "" {
+		return nil
+	}
+	parts := strings.Split(value, ",")
+	out := make([]string, 0, len(parts))
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part != "" {
+			out = append(out, part)
+		}
+	}
+	return out
 }

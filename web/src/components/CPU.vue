@@ -1,7 +1,7 @@
 <script setup>
 import highcharts from 'highcharts'
 import moment from 'moment'
-import {inject, onMounted, onUnmounted, ref, watch} from 'vue'
+import {onMounted, onUnmounted, ref, watch} from 'vue'
 
 const props = defineProps({
   data: {
@@ -15,6 +15,8 @@ const chart = ref(null)
 const formatUnit = (value) => {
     return 'CPU: ' + (value).toFixed(2) + '%'
 }
+
+const chartData = (data) => (data || []).slice(-60)
 
 const options = ref({
   chart: {
@@ -71,7 +73,7 @@ const options = ref({
   series: [{
     color: '#3760d1',
     fillColor: '#3760d120',
-    data: props.data.slice(-60),
+    data: chartData(props.data),
     showInLegend: false,
     pointInterval: 1000
   }],
@@ -81,25 +83,28 @@ const options = ref({
 })
 
 const updateOptions = (data) => {
-  // const seriesData = [...options.value.series[0].data, data]
-  chart.value.series[0].addPoint(data)
+  if (!chart.value || !data) return
+  const series = chart.value.series[0]
+  series.addPoint(data, true, series.data.length >= 60)
 }
 
-let interval = null
+const setSeriesData = (data) => {
+  if (!chart.value) return
+  chart.value.series[0].setData(chartData(data), true, false, false)
+}
 
 onMounted(() => {
   highcharts.setOptions({ global: { useUTC: false } });
   options.value.chart.renderTo = chartRef.value
   chart.value = highcharts.chart(options.value);
-
-  interval = setInterval(() => {
-    updateOptions(props.data[props.data.length - 1])
-  }, 1000)
 })
 
 onUnmounted(() => {
-  clearInterval(interval)
+  chart.value?.destroy()
+  chart.value = null
 })
+
+watch(() => props.data, setSeriesData, { deep: true })
 
 defineExpose({
   updateOptions,

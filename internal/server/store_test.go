@@ -1,12 +1,91 @@
 package server
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"path/filepath"
 	"testing"
 	"time"
 
 	"vps-agent/internal/agent"
 )
+
+func TestNormalizeConfigDefaultsAndOrigins(t *testing.T) {
+	cfg, err := normalizeConfig(Config{
+		AuthSecret:  "strong-auth-secret",
+		AdminPass:   "strong-admin-password",
+		PublicURL:   "https://monitor.example.com/base/?ignored=true#fragment",
+		CORSOrigins: []string{" https://panel.example.com/app ", "https://panel.example.com"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.AdminUser != "admin" {
+		t.Fatalf("admin user = %q", cfg.AdminUser)
+	}
+	if cfg.PublicURL != "https://monitor.example.com/base" {
+		t.Fatalf("public url = %q", cfg.PublicURL)
+	}
+	if cfg.OfflineWait != 10*time.Second {
+		t.Fatalf("offline wait = %s", cfg.OfflineWait)
+	}
+	if cfg.MaxNodes != 2000 {
+		t.Fatalf("max nodes = %d", cfg.MaxNodes)
+	}
+	if len(cfg.CORSOrigins) != 1 || cfg.CORSOrigins[0] != "https://panel.example.com" {
+		t.Fatalf("cors origins = %#v", cfg.CORSOrigins)
+	}
+}
+
+func TestNormalizeConfigRejectsInvalidOrigin(t *testing.T) {
+	_, err := normalizeConfig(Config{
+		AuthSecret:  "strong-auth-secret",
+		AdminPass:   "strong-admin-password",
+		CORSOrigins: []string{"javascript:alert(1)"},
+	})
+	if err == nil {
+		t.Fatal("expected invalid CORS origin error")
+	}
+}
+
+func TestWithCORSAllowsSameHostAndConfiguredOrigin(t *testing.T) {
+	handler := withCORS(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}), []string{"https://panel.example.com"})
+
+	sameHostReq := httptest.NewRequest(http.MethodOptions, "https://monitor.example.com/api/nodes", nil)
+	sameHostReq.Header.Set("Origin", "https://monitor.example.com")
+	sameHostReq.Host = "monitor.example.com"
+	sameHostResp := httptest.NewRecorder()
+	handler.ServeHTTP(sameHostResp, sameHostReq)
+	if sameHostResp.Code != http.StatusNoContent {
+		t.Fatalf("same-host status = %d", sameHostResp.Code)
+	}
+	if got := sameHostResp.Header().Get("Access-Control-Allow-Origin"); got != "https://monitor.example.com" {
+		t.Fatalf("same-host allow origin = %q", got)
+	}
+
+	allowedReq := httptest.NewRequest(http.MethodOptions, "https://monitor.example.com/api/nodes", nil)
+	allowedReq.Header.Set("Origin", "https://panel.example.com")
+	allowedReq.Host = "monitor.example.com"
+	allowedResp := httptest.NewRecorder()
+	handler.ServeHTTP(allowedResp, allowedReq)
+	if allowedResp.Code != http.StatusNoContent {
+		t.Fatalf("allowed status = %d", allowedResp.Code)
+	}
+	if got := allowedResp.Header().Get("Access-Control-Allow-Origin"); got != "https://panel.example.com" {
+		t.Fatalf("allowed origin = %q", got)
+	}
+
+	blockedReq := httptest.NewRequest(http.MethodOptions, "https://monitor.example.com/api/nodes", nil)
+	blockedReq.Header.Set("Origin", "https://evil.example.com")
+	blockedReq.Host = "monitor.example.com"
+	blockedResp := httptest.NewRecorder()
+	handler.ServeHTTP(blockedResp, blockedReq)
+	if blockedResp.Code != http.StatusForbidden {
+		t.Fatalf("blocked status = %d", blockedResp.Code)
+	}
+}
 
 func TestStoreBackendsNodeLifecycle(t *testing.T) {
 	tests := []struct {

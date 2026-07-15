@@ -8,6 +8,7 @@ PUBLIC_URL=""
 BIN_URL=""
 STORE_DRIVER=""
 DB_PATH=""
+CORS_ORIGINS=""
 
 random_secret() {
   if command -v openssl >/dev/null 2>&1; then
@@ -31,6 +32,7 @@ while [ "$#" -gt 0 ]; do
     --bin-url) BIN_URL="$2"; shift 2 ;;
     --store-driver) STORE_DRIVER="$2"; shift 2 ;;
     --db-path) DB_PATH="$2"; shift 2 ;;
+    --cors-origins) CORS_ORIGINS="$2"; shift 2 ;;
     *) echo "unknown option: $1" >&2; exit 2 ;;
   esac
 done
@@ -79,6 +81,9 @@ fi
 if [ -n "$DB_PATH" ]; then
   printf "DB_PATH=%s\n" "$DB_PATH" >>/etc/vps-monitor/server.env
 fi
+if [ -n "$CORS_ORIGINS" ]; then
+  printf "CORS_ORIGINS=%s\n" "$CORS_ORIGINS" >>/etc/vps-monitor/server.env
+fi
 chmod 600 /etc/vps-monitor/server.env
 
 cat >/etc/systemd/system/vps-server.service <<'EOF'
@@ -93,6 +98,11 @@ ExecStart=/usr/local/bin/vps-server
 Restart=always
 RestartSec=3
 NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/vps-monitor /etc/vps-monitor
+UMask=0077
 
 [Install]
 WantedBy=multi-user.target

@@ -1,5 +1,5 @@
 <script setup>
-import {computed, onMounted, provide, ref} from "vue";
+import {computed, onMounted, onUnmounted, provide, ref} from "vue";
 import moment from 'moment'
 import CPU from "@/components/CPU.vue";
 import Mem from "@/components/Mem.vue";
@@ -95,55 +95,92 @@ const stats = computed(() => {
 })
 
 let socket = null
+let reconnectTimer = null
+let pingTimer = null
+let reconnectAttempts = 0
+let mounted = false
+let configLoaded = false
+
+const CHART_POINT_LIMIT = 60
 
 let nowtime = (Math.floor(Date.now() / 1000))
 
+const deriveSocketURL = () => {
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+  return `${protocol}//${window.location.host}/ws`
+}
+
+const normalizeAPIURL = (value) => {
+  return (value || '').replace(/\/$/, '')
+}
+
 const fetchConfig = async () => {
+  if (configLoaded) {
+    return true
+  }
   try {
     const res = await axios.get('/config.json')
-    socketURL.value = res.data.socket
-    apiURL.value = res.data.apiURL
+    socketURL.value = res.data.socket || deriveSocketURL()
+    apiURL.value = normalizeAPIURL(res.data.apiURL)
     siteName.value = res.data.siteName || 'Monitor Party'
     offlineWait.value = Number(res.data.offlineWait) || 60
     document.title = siteName.value
+    configLoaded = true
+    return true
   } catch (e) {
     Message.error(t('get-config-error'))
+    return false
   }
 }
 
-const initScoket = async () => {
-  await fetchConfig()
+const trimChartData = (points) => {
+  if (points.length > CHART_POINT_LIMIT) {
+    points.splice(0, points.length - CHART_POINT_LIMIT)
+  }
+}
 
-  socket = new WebSocket(socketURL.value);  // 替换为实际的 WebSocket 服务器 URL
+const updateHostCharts = (host) => {
+  const name = host.Host.Name
+  if (!charts.value[name]) {
+    charts.value[name] = {
+      cpu: [],
+      mem: [],
+      net_in: [],
+      net_out: []
+    }
+  }
+
+  charts.value[name].cpu.push([host.TimeStamp * 1000, host.State.CPU])
+  charts.value[name].mem.push([host.TimeStamp * 1000, host.State.MemUsed])
+  charts.value[name].net_in.push([host.TimeStamp * 1000, host.State.NetOutSpeed])
+  charts.value[name].net_out.push([host.TimeStamp * 1000, host.State.NetInSpeed])
+
+  trimChartData(charts.value[name].cpu)
+  trimChartData(charts.value[name].mem)
+  trimChartData(charts.value[name].net_in)
+  trimChartData(charts.value[name].net_out)
+}
+
+const initScoket = async () => {
+  if (!mounted || socket?.readyState === WebSocket.OPEN || socket?.readyState === WebSocket.CONNECTING) {
+    return
+  }
+
+  if (!await fetchConfig()) {
+    scheduleReconnect()
+    return
+  }
+
+  socket = new WebSocket(socketURL.value)
 
   socket.onmessage = function(event) {
     try {
       const message = event.data;
-      const res = JSON.parse(message.replace('data: ', ''))
-      if (res != null) {
-        area.value = Array.from(new Set(res.map(item => item.Host.Name.slice(0, 2))))
-      }
+      const parsed = JSON.parse(message.replace('data: ', '')) || []
+      const res = Array.isArray(parsed) ? parsed : []
+      area.value = Array.from(new Set(res.map(item => item.Host.Name.slice(0, 2))))
       data.value = res.map((host) => {
-        if (!charts.value[host.Host.Name]) {
-          charts.value[host.Host.Name] = {
-            cpu: [],
-            mem: [],
-            net_in: [],
-            net_out: []
-          }
-        }
-
-        if (charts.value[host.Host.Name].cpu.length == 2) {
-          charts.value[host.Host.Name].cpu = charts.value[host.Host.Name].cpu.slice(1)
-          charts.value[host.Host.Name].mem = charts.value[host.Host.Name].mem.slice(1)
-          charts.value[host.Host.Name].net_in = charts.value[host.Host.Name].net_in.slice(1)
-          charts.value[host.Host.Name].net_out = charts.value[host.Host.Name].net_out.slice(1)
-        }
-
-        charts.value[host.Host.Name].cpu.push([host.TimeStamp * 1000, host.State.CPU])
-        charts.value[host.Host.Name].mem.push([host.TimeStamp * 1000, host.State.MemUsed])
-        charts.value[host.Host.Name].net_in.push([host.TimeStamp * 1000, host.State.NetOutSpeed])
-        charts.value[host.Host.Name].net_out.push([host.TimeStamp * 1000, host.State.NetInSpeed])
+        updateHostCharts(host)
 
         return {
           ...host,
@@ -151,7 +188,7 @@ const initScoket = async () => {
         }
       })
 
-      setTimeout(() => sendPing(), 1000)
+      schedulePing()
 
     } catch (error) {
       console.error(t('ws-error'), error);
@@ -159,28 +196,60 @@ const initScoket = async () => {
   };
 
   socket.onopen = function () {
+    reconnectAttempts = 0
     sendPing()
   }
 
   socket.onclose = function () {
-    Message.warning(t('ws-error-reconnect'))
-
-    initScoket()
+    socket = null
+    scheduleReconnect()
   }
+
+  socket.onerror = function () {
+    socket?.close()
+  }
+}
+
+const scheduleReconnect = () => {
+  if (!mounted || reconnectTimer) {
+    return
+  }
+  Message.warning(t('ws-error-reconnect'))
+  const delay = Math.min(30000, 1000 * Math.pow(2, reconnectAttempts))
+  reconnectAttempts += 1
+  reconnectTimer = window.setTimeout(() => {
+    reconnectTimer = null
+    initScoket()
+  }, delay)
+}
+
+const schedulePing = () => {
+  window.clearTimeout(pingTimer)
+  pingTimer = window.setTimeout(() => sendPing(), 1000)
 }
 
 const sendPing = () => {
   nowtime = (Math.floor(Date.now() / 1000))
-  socket.send('ping')
+  if (socket?.readyState === WebSocket.OPEN) {
+    socket.send('ping')
+  }
 }
 
 onMounted(async() => {
+  mounted = true
   if (dark.value) {
     document.body.setAttribute('arco-theme', 'dark')
   }
 
   await initScoket()
   handleFetchHostInfo()
+})
+
+onUnmounted(() => {
+  mounted = false
+  window.clearTimeout(reconnectTimer)
+  window.clearTimeout(pingTimer)
+  socket?.close()
 })
 
 const progressStatus = (value) => {
@@ -211,7 +280,7 @@ const hostInfo = ref({})
 
 const handleFetchHostInfo = async () => {
   try {
-    const res = await axios.get(apiURL.value + '/info')
+    const res = await axios.get(`${apiURL.value}/info`)
     hostInfo.value = {}
     res.data.forEach((item) => {
       hostInfo.value[item.name] = item

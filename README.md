@@ -335,6 +335,8 @@ ADMIN_PASS=replace-with-strong-random-password
 PUBLIC_URL=https://monitor.example.com
 DATA_PATH=/var/lib/vps-monitor/server.json
 MAX_NODES=2000
+# 可选：后台和 API 需要被其他前端域名访问时配置，留空则仅允许同源
+CORS_ORIGINS=https://panel.example.com,https://admin.example.com
 ```
 
 默认存储为 JSON 文件。如果要启用 SQLite：

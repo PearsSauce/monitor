@@ -36,6 +36,7 @@ type Config struct {
 	StoreDriver string
 	DBPath      string
 	PublicURL   string
+	CORSOrigins []string
 	OfflineWait time.Duration
 	MaxNodes    int
 }
@@ -66,30 +67,10 @@ type dataStore interface {
 }
 
 func New(cfg Config) (*Server, error) {
-	if isWeakSecret(cfg.AuthSecret) {
-		return nil, errors.New("AUTH_SECRET must not be empty or change-me")
-	}
-	if cfg.AdminUser == "" {
-		cfg.AdminUser = "admin"
-	}
-	if isWeakSecret(cfg.AdminPass) {
-		return nil, errors.New("ADMIN_PASS must not be empty or change-me")
-	}
-	if cfg.PublicURL != "" {
-		publicURL, err := cleanPublicURL(cfg.PublicURL)
-		if err != nil {
-			return nil, err
-		}
-		cfg.PublicURL = publicURL
-	}
-	if cfg.DataPath == "" {
-		cfg.DataPath = "data/server.json"
-	}
-	if cfg.OfflineWait == 0 {
-		cfg.OfflineWait = 10 * time.Second
-	}
-	if cfg.MaxNodes == 0 {
-		cfg.MaxNodes = 2000
+	var err error
+	cfg, err = normalizeConfig(cfg)
+	if err != nil {
+		return nil, err
 	}
 	store, err := newStoreBackend(cfg)
 	if err != nil {
@@ -122,13 +103,53 @@ func New(cfg Config) (*Server, error) {
 	mux.HandleFunc("/", s.handleStatic)
 	s.http = &http.Server{
 		Addr:           cfg.Addr,
-		Handler:        withCORS(mux),
+		Handler:        withCORS(mux, cfg.CORSOrigins),
 		ReadTimeout:    10 * time.Second,
 		WriteTimeout:   15 * time.Second,
 		IdleTimeout:    60 * time.Second,
 		MaxHeaderBytes: 16 << 10,
 	}
 	return s, nil
+}
+
+func normalizeConfig(cfg Config) (Config, error) {
+	if isWeakSecret(cfg.AuthSecret) {
+		return Config{}, errors.New("AUTH_SECRET must not be empty or change-me")
+	}
+	if cfg.AdminUser == "" {
+		cfg.AdminUser = "admin"
+	}
+	if isWeakSecret(cfg.AdminPass) {
+		return Config{}, errors.New("ADMIN_PASS must not be empty or change-me")
+	}
+	if cfg.PublicURL != "" {
+		publicURL, err := cleanPublicURL(cfg.PublicURL)
+		if err != nil {
+			return Config{}, err
+		}
+		cfg.PublicURL = publicURL
+	}
+	if cfg.DataPath == "" {
+		cfg.DataPath = "data/server.json"
+	}
+	if cfg.OfflineWait == 0 {
+		cfg.OfflineWait = 10 * time.Second
+	}
+	if cfg.MaxNodes == 0 {
+		cfg.MaxNodes = 2000
+	}
+	if cfg.OfflineWait < time.Second {
+		return Config{}, errors.New("OFFLINE_WAIT must be >= 1s")
+	}
+	if cfg.MaxNodes <= 0 {
+		return Config{}, errors.New("MAX_NODES must be positive")
+	}
+	origins, err := cleanOriginList(cfg.CORSOrigins)
+	if err != nil {
+		return Config{}, err
+	}
+	cfg.CORSOrigins = origins
+	return cfg, nil
 }
 
 func newStoreBackend(cfg Config) (dataStore, error) {
@@ -169,7 +190,7 @@ func (s *Server) handleAdminLogin(w http.ResponseWriter, r *http.Request) {
 		methodNotAllowed(w)
 		return
 	}
-	if !validAdminOrigin(r) {
+	if !s.validAdminOrigin(r) {
 		http.Error(w, "invalid request origin", http.StatusForbidden)
 		return
 	}
@@ -213,7 +234,7 @@ func (s *Server) handleAdminNodes(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "admin login required", http.StatusUnauthorized)
 		return
 	}
-	if r.Method != http.MethodGet && !validAdminOrigin(r) {
+	if r.Method != http.MethodGet && !s.validAdminOrigin(r) {
 		http.Error(w, "invalid request origin", http.StatusForbidden)
 		return
 	}
@@ -266,7 +287,7 @@ func (s *Server) handleAdminNodesImport(w http.ResponseWriter, r *http.Request) 
 		methodNotAllowed(w)
 		return
 	}
-	if !validAdminOrigin(r) {
+	if !s.validAdminOrigin(r) {
 		http.Error(w, "invalid request origin", http.StatusForbidden)
 		return
 	}
@@ -393,7 +414,7 @@ func (s *Server) handleAdminSettings(w http.ResponseWriter, r *http.Request) {
 	case http.MethodGet:
 		writeJSON(w, s.store.GetSettings())
 	case http.MethodPost:
-		if !validAdminOrigin(r) {
+		if !s.validAdminOrigin(r) {
 			http.Error(w, "invalid request origin", http.StatusForbidden)
 			return
 		}
@@ -431,7 +452,7 @@ func (s *Server) handleInfo(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "admin login required", http.StatusUnauthorized)
 			return
 		}
-		if !validAdminOrigin(r) {
+		if !s.validAdminOrigin(r) {
 			http.Error(w, "invalid request origin", http.StatusForbidden)
 			return
 		}
@@ -466,7 +487,7 @@ func (s *Server) handleDelete(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "admin login required", http.StatusUnauthorized)
 		return
 	}
-	if !validAdminOrigin(r) {
+	if !s.validAdminOrigin(r) {
 		http.Error(w, "invalid request origin", http.StatusForbidden)
 		return
 	}
@@ -745,9 +766,28 @@ func methodNotAllowed(w http.ResponseWriter) {
 	http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 }
 
-func withCORS(next http.Handler) http.Handler {
+func withCORS(next http.Handler, allowedOrigins []string) http.Handler {
+	allowed := map[string]bool{}
+	allowAll := false
+	for _, origin := range allowedOrigins {
+		if origin == "*" {
+			allowAll = true
+			continue
+		}
+		allowed[origin] = true
+	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
+		origin := strings.TrimSpace(r.Header.Get("Origin"))
+		if origin != "" {
+			if corsOriginAllowed(r, origin, allowed, allowAll) {
+				w.Header().Set("Access-Control-Allow-Origin", origin)
+				w.Header().Set("Access-Control-Allow-Credentials", "true")
+				w.Header().Add("Vary", "Origin")
+			} else if r.Method == http.MethodOptions {
+				http.Error(w, "origin not allowed", http.StatusForbidden)
+				return
+			}
+		}
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Node-ID")
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
 		if r.Method == http.MethodOptions {
@@ -1375,8 +1415,62 @@ func cleanPublicURL(value string) (string, error) {
 	return u.String(), nil
 }
 
-func validAdminOrigin(r *http.Request) bool {
-	origin := r.Header.Get("Origin")
+func cleanOriginList(values []string) ([]string, error) {
+	out := make([]string, 0, len(values))
+	seen := map[string]bool{}
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			continue
+		}
+		if value == "*" {
+			if !seen[value] {
+				out = append(out, value)
+				seen[value] = true
+			}
+			continue
+		}
+		origin, err := cleanOrigin(value)
+		if err != nil {
+			return nil, err
+		}
+		if !seen[origin] {
+			out = append(out, origin)
+			seen[origin] = true
+		}
+	}
+	return out, nil
+}
+
+func cleanOrigin(value string) (string, error) {
+	u, err := url.Parse(strings.TrimSpace(value))
+	if err != nil || u.Host == "" || (u.Scheme != "https" && u.Scheme != "http") {
+		return "", fmt.Errorf("CORS_ORIGINS contains invalid origin %q", value)
+	}
+	u.Path = ""
+	u.RawQuery = ""
+	u.Fragment = ""
+	return strings.TrimRight(u.String(), "/"), nil
+}
+
+func corsOriginAllowed(r *http.Request, origin string, allowed map[string]bool, allowAll bool) bool {
+	if origin == "" {
+		return true
+	}
+	if allowAll {
+		return true
+	}
+	if requestOriginSameHost(r, origin) {
+		return true
+	}
+	origin, err := cleanOrigin(origin)
+	if err != nil {
+		return false
+	}
+	return allowed[origin]
+}
+
+func requestOriginSameHost(r *http.Request, origin string) bool {
 	if origin == "" {
 		return true
 	}
@@ -1385,6 +1479,23 @@ func validAdminOrigin(r *http.Request) bool {
 		return false
 	}
 	return strings.EqualFold(u.Host, r.Host)
+}
+
+func (s *Server) validAdminOrigin(r *http.Request) bool {
+	origin := strings.TrimSpace(r.Header.Get("Origin"))
+	if origin == "" {
+		return true
+	}
+	allowed := map[string]bool{}
+	allowAll := false
+	for _, value := range s.cfg.CORSOrigins {
+		if value == "*" {
+			allowAll = true
+			continue
+		}
+		allowed[value] = true
+	}
+	return corsOriginAllowed(r, origin, allowed, allowAll)
 }
 
 func upgradeWebSocket(w http.ResponseWriter, r *http.Request) (net.Conn, *bufioWriter, error) {

@@ -7,15 +7,15 @@ import vue from '@vitejs/plugin-vue'
 import vueDevTools from 'vite-plugin-vue-devtools'
 
 const generateConfig = () => ({
-  socket: process.env.SOCKETURL || "wss://www.monitor.party/ws",
-  apiURL: process.env.APIURL || "https://www.monitor.party",
+  socket: process.env.SOCKETURL || "",
+  apiURL: process.env.APIURL || "",
 });
 
 // https://vite.dev/config/
-export default defineConfig({
+export default defineConfig(({ command }) => ({
   plugins: [
     vue(),
-    vueDevTools(),
+    command === 'serve' && vueDevTools(),
     {
       name: 'dynamic-config-json',
       configureServer (server) {
@@ -36,10 +36,22 @@ export default defineConfig({
         console.log('Generated config.json:', generateConfig());
       },
     },
-  ],
+  ].filter(Boolean),
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url))
     },
   },
-})
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          arco: ['@arco-design/web-vue'],
+          charts: ['highcharts'],
+          vue: ['vue', 'vue-i18n'],
+          vendor: ['axios', 'moment'],
+        },
+      },
+    },
+  },
+}))

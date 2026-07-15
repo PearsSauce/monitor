@@ -79,6 +79,7 @@ ADMIN_USER="$(ask "Admin username" "admin")"
 ADMIN_PASS="$(ask_secret "Admin password (leave empty to generate)")"
 ADDR="$(ask "Listen address" ":3000")"
 MAX_NODES="$(ask "Max nodes" "2000")"
+CORS_ORIGINS="$(ask "Allowed CORS origins (comma-separated, empty for same-origin only)" "")"
 STORE_DRIVER="$(ask "Storage driver (json/sqlite)" "json")"
 DB_PATH=""
 if [ "$STORE_DRIVER" = "sqlite" ]; then
@@ -144,6 +145,9 @@ fi
 if [ -n "$DB_PATH" ]; then
   printf "DB_PATH=%s\n" "$DB_PATH" >>/etc/vps-monitor/server.env
 fi
+if [ -n "$CORS_ORIGINS" ]; then
+  printf "CORS_ORIGINS=%s\n" "$CORS_ORIGINS" >>/etc/vps-monitor/server.env
+fi
 chmod 600 /etc/vps-monitor/server.env
 
 cat >/etc/systemd/system/vps-server.service <<'EOF'
@@ -158,6 +162,11 @@ ExecStart=/usr/local/bin/vps-server
 Restart=always
 RestartSec=3
 NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/vps-monitor /etc/vps-monitor
+UMask=0077
 
 [Install]
 WantedBy=multi-user.target
