@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"encoding/json"
+	"errors"
 	"io"
 	"net"
 	"net/http"
@@ -750,7 +751,7 @@ func TestWebSocketAcceptMatchesRFCExample(t *testing.T) {
 }
 
 func TestReadWSRequiresMaskedClientFrames(t *testing.T) {
-	maskedFrame := []byte{0x81, 0x82, 0x01, 0x02, 0x03, 0x04, 'o' ^ 0x01, 'k' ^ 0x02}
+	maskedFrame := maskedWSFrame(0x81, "ok")
 	payload, err := readWS(&bufferConn{Reader: bytes.NewReader(maskedFrame)})
 	if err != nil {
 		t.Fatal(err)
@@ -762,6 +763,46 @@ func TestReadWSRequiresMaskedClientFrames(t *testing.T) {
 	_, err = readWS(&bufferConn{Reader: bytes.NewReader([]byte{0x81, 0x02, 'o', 'k'})})
 	if err == nil || !strings.Contains(err.Error(), "not masked") {
 		t.Fatalf("unmasked frame error = %v", err)
+	}
+}
+
+func TestReadWSRejectsUnsupportedClientFrames(t *testing.T) {
+	tests := []struct {
+		name    string
+		frame   []byte
+		wantErr string
+	}{
+		{
+			name:    "binary opcode",
+			frame:   maskedWSFrame(0x82, "ok"),
+			wantErr: "unsupported opcode",
+		},
+		{
+			name:    "fragmented text",
+			frame:   maskedWSFrame(0x01, "ok"),
+			wantErr: "fragmented",
+		},
+		{
+			name:    "reserved bit",
+			frame:   maskedWSFrame(0xc1, "ok"),
+			wantErr: "reserved bits",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := readWS(&bufferConn{Reader: bytes.NewReader(tt.frame)})
+			if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+				t.Fatalf("readWS error = %v, want %q", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestReadWSCloseFrameReturnsEOF(t *testing.T) {
+	_, err := readWS(&bufferConn{Reader: bytes.NewReader(maskedWSFrame(0x88, ""))})
+	if !errors.Is(err, io.EOF) {
+		t.Fatalf("close frame error = %v", err)
 	}
 }
 
@@ -1176,6 +1217,16 @@ func (c *bufferConn) RemoteAddr() net.Addr             { return testAddr("remote
 func (c *bufferConn) SetDeadline(time.Time) error      { return nil }
 func (c *bufferConn) SetReadDeadline(time.Time) error  { return nil }
 func (c *bufferConn) SetWriteDeadline(time.Time) error { return nil }
+
+func maskedWSFrame(firstByte byte, payload string) []byte {
+	mask := []byte{0x01, 0x02, 0x03, 0x04}
+	frame := []byte{firstByte, 0x80 | byte(len(payload))}
+	frame = append(frame, mask...)
+	for i, b := range []byte(payload) {
+		frame = append(frame, b^mask[i%len(mask)])
+	}
+	return frame
+}
 
 type testAddr string
 

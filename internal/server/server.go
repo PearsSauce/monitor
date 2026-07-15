@@ -1651,9 +1651,20 @@ func readWS(conn net.Conn) ([]byte, error) {
 	if !masked {
 		return nil, errors.New("websocket client frame not masked")
 	}
+	if header[0]&0x70 != 0 {
+		return nil, errors.New("websocket reserved bits set")
+	}
+	fin := header[0]&0x80 != 0
 	opcode := header[0] & 0x0f
-	if opcode == 8 {
+	switch opcode {
+	case 1:
+		if !fin {
+			return nil, errors.New("websocket fragmented frames unsupported")
+		}
+	case 8:
 		return nil, io.EOF
+	default:
+		return nil, errors.New("websocket unsupported opcode")
 	}
 	length := uint64(header[1] & 0x7f)
 	if length == 126 {
