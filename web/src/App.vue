@@ -9,6 +9,7 @@ import axios from "axios";
 import { Message } from "@arco-design/web-vue";
 import StatsCard from "@/components/StatsCard.vue";
 import {formatAgo, formatBytes, formatDateStamp, formatTimeStamp, formatUptime, formatUptimeZh, calculateRemainingDays} from '@/utils/utils'
+import {normalizeAPIURL, normalizeMonitorHosts} from '@/utils/monitor'
 import HeaderLocale from "@/components/HeaderLocale.vue";
 import {useI18n} from "vue-i18n";
 
@@ -101,17 +102,11 @@ let reconnectAttempts = 0
 let mounted = false
 let configLoaded = false
 
-const CHART_POINT_LIMIT = 60
-
 let nowtime = (Math.floor(Date.now() / 1000))
 
 const deriveSocketURL = () => {
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
   return `${protocol}//${window.location.host}/ws`
-}
-
-const normalizeAPIURL = (value) => {
-  return (value || '').replace(/\/$/, '')
 }
 
 const fetchConfig = async () => {
@@ -133,34 +128,6 @@ const fetchConfig = async () => {
   }
 }
 
-const trimChartData = (points) => {
-  if (points.length > CHART_POINT_LIMIT) {
-    points.splice(0, points.length - CHART_POINT_LIMIT)
-  }
-}
-
-const updateHostCharts = (host) => {
-  const name = host.Host.Name
-  if (!charts.value[name]) {
-    charts.value[name] = {
-      cpu: [],
-      mem: [],
-      net_in: [],
-      net_out: []
-    }
-  }
-
-  charts.value[name].cpu.push([host.TimeStamp * 1000, host.State.CPU])
-  charts.value[name].mem.push([host.TimeStamp * 1000, host.State.MemUsed])
-  charts.value[name].net_in.push([host.TimeStamp * 1000, host.State.NetOutSpeed])
-  charts.value[name].net_out.push([host.TimeStamp * 1000, host.State.NetInSpeed])
-
-  trimChartData(charts.value[name].cpu)
-  trimChartData(charts.value[name].mem)
-  trimChartData(charts.value[name].net_in)
-  trimChartData(charts.value[name].net_out)
-}
-
 const initScoket = async () => {
   if (!mounted || socket?.readyState === WebSocket.OPEN || socket?.readyState === WebSocket.CONNECTING) {
     return
@@ -177,16 +144,9 @@ const initScoket = async () => {
     try {
       const message = event.data;
       const parsed = JSON.parse(message.replace('data: ', '')) || []
-      const res = Array.isArray(parsed) ? parsed : []
-      area.value = Array.from(new Set(res.map(item => item.Host.Name.slice(0, 2))))
-      data.value = res.map((host) => {
-        updateHostCharts(host)
-
-        return {
-          ...host,
-          status: (host.TimeStamp > 0 && nowtime - host.TimeStamp <= offlineWait.value) ? 1 : 0
-        }
-      })
+      const normalized = normalizeMonitorHosts(parsed, nowtime, offlineWait.value, charts.value)
+      area.value = normalized.areas
+      data.value = normalized.hosts
 
       schedulePing()
 
