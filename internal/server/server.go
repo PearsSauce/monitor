@@ -459,17 +459,17 @@ func (s *Server) handleInfo(w http.ResponseWriter, r *http.Request) {
 	case http.MethodGet:
 		writeJSON(w, s.store.InfoList())
 	case http.MethodPost:
-		var req HostInfo
-		if err := json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&req); err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
 		if !s.adminAuthorized(r) {
 			http.Error(w, "admin login required", http.StatusUnauthorized)
 			return
 		}
 		if !s.validAdminOrigin(r) {
 			http.Error(w, "invalid request origin", http.StatusForbidden)
+			return
+		}
+		var req HostInfo
+		if err := json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&req); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
 		req.Name = strings.TrimSpace(req.Name)
@@ -492,19 +492,19 @@ func (s *Server) handleDelete(w http.ResponseWriter, r *http.Request) {
 		methodNotAllowed(w)
 		return
 	}
-	var req struct {
-		Name string `json:"name"`
-	}
-	if err := json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&req); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
 	if !s.adminAuthorized(r) {
 		http.Error(w, "admin login required", http.StatusUnauthorized)
 		return
 	}
 	if !s.validAdminOrigin(r) {
 		http.Error(w, "invalid request origin", http.StatusForbidden)
+		return
+	}
+	var req struct {
+		Name string `json:"name"`
+	}
+	if err := json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 	if !validNodeID(req.Name) {

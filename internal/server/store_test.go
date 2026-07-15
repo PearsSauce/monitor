@@ -176,6 +176,95 @@ func TestAdminInstallCommandRequiresPostAndValidOrigin(t *testing.T) {
 	}
 }
 
+func TestInfoPostChecksAdminBeforeBody(t *testing.T) {
+	s := newTestServer(t)
+	const nodeID = "CN-info-001"
+
+	unauthorizedReq := adminRequestWithBody(http.MethodPost, "https://monitor.example.com/info", "", "{")
+	unauthorizedResp := httptest.NewRecorder()
+	s.handleInfo(unauthorizedResp, unauthorizedReq)
+	if unauthorizedResp.Code != http.StatusUnauthorized {
+		t.Fatalf("unauthorized info status = %d body = %s", unauthorizedResp.Code, unauthorizedResp.Body.String())
+	}
+	if got := s.store.InfoList(); len(got) != 0 {
+		t.Fatalf("unauthorized info request wrote infos: %#v", got)
+	}
+
+	token, err := s.sessions.Create()
+	if err != nil {
+		t.Fatal(err)
+	}
+	badOriginReq := adminRequestWithBody(http.MethodPost, "https://monitor.example.com/info", token, "{")
+	badOriginReq.Header.Set("Origin", "https://evil.example.com")
+	badOriginResp := httptest.NewRecorder()
+	s.handleInfo(badOriginResp, badOriginReq)
+	if badOriginResp.Code != http.StatusForbidden {
+		t.Fatalf("bad-origin info status = %d body = %s", badOriginResp.Code, badOriginResp.Body.String())
+	}
+	if got := s.store.InfoList(); len(got) != 0 {
+		t.Fatalf("bad-origin info request wrote infos: %#v", got)
+	}
+
+	okReq := adminRequestWithBody(http.MethodPost, "https://monitor.example.com/info", token, `{"name":"`+nodeID+`","seller":"seller","traffic_reset_day":12}`)
+	okReq.Header.Set("Origin", "https://monitor.example.com")
+	okResp := httptest.NewRecorder()
+	s.handleInfo(okResp, okReq)
+	if okResp.Code != http.StatusOK {
+		t.Fatalf("valid info status = %d body = %s", okResp.Code, okResp.Body.String())
+	}
+	infos := s.store.InfoList()
+	if len(infos) != 1 {
+		t.Fatalf("infos len = %d", len(infos))
+	}
+	if infos[0].Name != nodeID || infos[0].Seller != "seller" || infos[0].TrafficResetDay != 12 {
+		t.Fatalf("saved info = %#v", infos[0])
+	}
+}
+
+func TestDeletePostChecksAdminBeforeBody(t *testing.T) {
+	s := newTestServer(t)
+	const nodeID = "CN-delete-001"
+	if err := s.store.UpsertInfo(HostInfo{Name: nodeID, Seller: "seller"}); err != nil {
+		t.Fatal(err)
+	}
+
+	unauthorizedReq := adminRequestWithBody(http.MethodPost, "https://monitor.example.com/delete", "", "{")
+	unauthorizedResp := httptest.NewRecorder()
+	s.handleDelete(unauthorizedResp, unauthorizedReq)
+	if unauthorizedResp.Code != http.StatusUnauthorized {
+		t.Fatalf("unauthorized delete status = %d body = %s", unauthorizedResp.Code, unauthorizedResp.Body.String())
+	}
+	if got := s.store.InfoList(); len(got) != 1 || got[0].Name != nodeID {
+		t.Fatalf("unauthorized delete changed infos: %#v", got)
+	}
+
+	token, err := s.sessions.Create()
+	if err != nil {
+		t.Fatal(err)
+	}
+	badOriginReq := adminRequestWithBody(http.MethodPost, "https://monitor.example.com/delete", token, "{")
+	badOriginReq.Header.Set("Origin", "https://evil.example.com")
+	badOriginResp := httptest.NewRecorder()
+	s.handleDelete(badOriginResp, badOriginReq)
+	if badOriginResp.Code != http.StatusForbidden {
+		t.Fatalf("bad-origin delete status = %d body = %s", badOriginResp.Code, badOriginResp.Body.String())
+	}
+	if got := s.store.InfoList(); len(got) != 1 || got[0].Name != nodeID {
+		t.Fatalf("bad-origin delete changed infos: %#v", got)
+	}
+
+	okReq := adminRequestWithBody(http.MethodPost, "https://monitor.example.com/delete", token, `{"name":"`+nodeID+`"}`)
+	okReq.Header.Set("Origin", "https://monitor.example.com")
+	okResp := httptest.NewRecorder()
+	s.handleDelete(okResp, okReq)
+	if okResp.Code != http.StatusOK {
+		t.Fatalf("valid delete status = %d body = %s", okResp.Code, okResp.Body.String())
+	}
+	if got := s.store.InfoList(); len(got) != 0 {
+		t.Fatalf("valid delete kept infos: %#v", got)
+	}
+}
+
 func TestAgentAuthorizationRequiresBearerToken(t *testing.T) {
 	s := newTestServer(t)
 	const nodeID = "CN-agent-001"
@@ -383,6 +472,15 @@ func authedAdminRequest(method, target, token string) *http.Request {
 	req := httptest.NewRequest(method, target, nil)
 	req.Host = "monitor.example.com"
 	req.AddCookie(&http.Cookie{Name: "monitor_admin", Value: token})
+	return req
+}
+
+func adminRequestWithBody(method, target, token, body string) *http.Request {
+	req := httptest.NewRequest(method, target, strings.NewReader(body))
+	req.Host = "monitor.example.com"
+	if token != "" {
+		req.AddCookie(&http.Cookie{Name: "monitor_admin", Value: token})
+	}
 	return req
 }
 
