@@ -397,6 +397,60 @@ func TestAdminNodeBackupEndpointsRequireAuthOrigin(t *testing.T) {
 	}
 }
 
+func TestPublicReadEndpointsRequireGet(t *testing.T) {
+	s := newTestServer(t)
+	s.cfg.PublicURL = "https://public.example.com/panel"
+	s.cfg.OfflineWait = 45 * time.Second
+	if err := s.store.UpdateSettings(Settings{SiteName: "Public Monitor"}); err != nil {
+		t.Fatal(err)
+	}
+	const nodeID = "CN-public-001"
+	if err := s.store.UpsertReport(sampleMetrics(nodeID, 100, 200), 10); err != nil {
+		t.Fatal(err)
+	}
+
+	configPostReq := httptest.NewRequest(http.MethodPost, "https://monitor.example.com/config.json", nil)
+	configPostResp := httptest.NewRecorder()
+	s.handleConfig(configPostResp, configPostReq)
+	if configPostResp.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("config POST status = %d body = %s", configPostResp.Code, configPostResp.Body.String())
+	}
+
+	configGetReq := httptest.NewRequest(http.MethodGet, "https://monitor.example.com/config.json", nil)
+	configGetResp := httptest.NewRecorder()
+	s.handleConfig(configGetResp, configGetReq)
+	if configGetResp.Code != http.StatusOK {
+		t.Fatalf("config GET status = %d body = %s", configGetResp.Code, configGetResp.Body.String())
+	}
+	var config map[string]string
+	decodeJSONResponse(t, configGetResp, &config)
+	if config["apiURL"] != "https://public.example.com/panel" || config["socket"] != "wss://public.example.com/panel/ws" {
+		t.Fatalf("config base urls = %#v", config)
+	}
+	if config["siteName"] != "Public Monitor" || config["offlineWait"] != "45" {
+		t.Fatalf("config metadata = %#v", config)
+	}
+
+	nodesPostReq := httptest.NewRequest(http.MethodPost, "https://monitor.example.com/api/nodes", nil)
+	nodesPostResp := httptest.NewRecorder()
+	s.handleNodes(nodesPostResp, nodesPostReq)
+	if nodesPostResp.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("nodes POST status = %d body = %s", nodesPostResp.Code, nodesPostResp.Body.String())
+	}
+
+	nodesGetReq := httptest.NewRequest(http.MethodGet, "https://monitor.example.com/api/nodes", nil)
+	nodesGetResp := httptest.NewRecorder()
+	s.handleNodes(nodesGetResp, nodesGetReq)
+	if nodesGetResp.Code != http.StatusOK {
+		t.Fatalf("nodes GET status = %d body = %s", nodesGetResp.Code, nodesGetResp.Body.String())
+	}
+	var nodes []AkileHost
+	decodeJSONResponse(t, nodesGetResp, &nodes)
+	if len(nodes) != 1 || nodes[0].Host.Name != nodeID {
+		t.Fatalf("nodes response = %#v", nodes)
+	}
+}
+
 func TestAgentAuthorizationRequiresBearerToken(t *testing.T) {
 	s := newTestServer(t)
 	const nodeID = "CN-agent-001"

@@ -412,6 +412,10 @@ func (s *Server) handleAgentReport(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleConfig(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		methodNotAllowed(w)
+		return
+	}
 	base := s.requestBase(r)
 	writeJSON(w, map[string]string{
 		"socket":      socketURL(base),
@@ -569,6 +573,10 @@ func (s *Server) handleDownload(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleNodes(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		methodNotAllowed(w)
+		return
+	}
 	s.writeCachedHosts(w)
 }
 
