@@ -26,6 +26,7 @@ import (
 	"time"
 
 	"vps-agent/internal/agent"
+	serverapp "vps-agent/internal/server/application"
 )
 
 type Config struct {
@@ -44,27 +45,10 @@ type Config struct {
 
 type Server struct {
 	cfg      Config
-	store    dataStore
+	store    serverapp.Store
 	http     *http.Server
 	sessions *SessionStore
 	cache    *ResponseCache
-}
-
-type dataStore interface {
-	SiteName() string
-	GetSettings() Settings
-	UpdateSettings(Settings) error
-	UpsertReport(agent.Metrics, int) error
-	AddPlannedNode(string, int) error
-	SetNodeToken(string, string, int) error
-	ValidNodeToken(string, string) bool
-	UpsertInfo(HostInfo) error
-	Delete(string) error
-	InfoList() []HostInfo
-	AkileHosts() []AkileHost
-	AdminNodes(time.Duration) []AdminNode
-	ExportNodes() NodeBackup
-	ImportNodes(NodeBackup, int) (int, error)
 }
 
 func New(cfg Config) (*Server, error) {
@@ -153,7 +137,7 @@ func normalizeConfig(cfg Config) (Config, error) {
 	return cfg, nil
 }
 
-func newStoreBackend(cfg Config) (dataStore, error) {
+func newStoreBackend(cfg Config) (serverapp.Store, error) {
 	driver := strings.ToLower(strings.TrimSpace(cfg.StoreDriver))
 	if driver == "" && cfg.DBPath != "" {
 		driver = "sqlite"
@@ -891,111 +875,6 @@ type Store struct {
 	Traffic  map[string]TrafficStat   `json:"traffic"`
 
 	lastTrafficSave time.Time `json:"-"`
-}
-
-type Settings struct {
-	SiteName string `json:"site_name"`
-}
-
-type PlannedNode struct {
-	NodeID    string `json:"node_id"`
-	CreatedAt int64  `json:"created_at"`
-	TokenHash string `json:"token_hash,omitempty"`
-}
-
-type AdminNode struct {
-	NodeID    string   `json:"node_id"`
-	Online    bool     `json:"online"`
-	LastSeen  int64    `json:"last_seen"`
-	CreatedAt int64    `json:"created_at"`
-	Info      HostInfo `json:"info"`
-}
-
-type NodeBackup struct {
-	Version    int                `json:"version"`
-	ExportedAt int64              `json:"exported_at"`
-	Nodes      []NodeBackupRecord `json:"nodes"`
-}
-
-type NodeBackupRecord struct {
-	NodeID    string   `json:"node_id"`
-	CreatedAt int64    `json:"created_at"`
-	TokenHash string   `json:"token_hash,omitempty"`
-	Info      HostInfo `json:"info"`
-}
-
-type HostInfo struct {
-	Name            string `json:"name"`
-	DueTime         int64  `json:"due_time"`
-	BuyURL          string `json:"buy_url"`
-	Seller          string `json:"seller"`
-	Price           string `json:"price"`
-	Cycle           string `json:"cycle"`
-	Bandwidth       string `json:"bandwidth"`
-	Traffic         string `json:"traffic"`
-	TrafficResetDay int    `json:"traffic_reset_day"`
-	Show            bool   `json:"show_purchase_info"`
-	AuthSecret      string `json:"auth_secret,omitempty"`
-}
-
-type TrafficStat struct {
-	ResetDay    int    `json:"reset_day"`
-	PeriodStart int64  `json:"period_start"`
-	NextReset   int64  `json:"next_reset"`
-	LastRxBytes uint64 `json:"last_rx_bytes"`
-	LastTxBytes uint64 `json:"last_tx_bytes"`
-	RxTotal     uint64 `json:"rx_total"`
-	TxTotal     uint64 `json:"tx_total"`
-	UpdatedAt   int64  `json:"updated_at"`
-}
-
-type AkileHost struct {
-	Host      AkileHostMeta  `json:"Host"`
-	State     AkileHostState `json:"State"`
-	TimeStamp int64          `json:"TimeStamp"`
-}
-
-type AkileHostMeta struct {
-	Name            string `json:"Name"`
-	Hostname        string `json:"Hostname"`
-	Platform        string `json:"Platform"`
-	PlatformVersion string `json:"PlatformVersion"`
-	Kernel          string `json:"Kernel"`
-	Arch            string `json:"Arch"`
-	Virtualization  string `json:"Virtualization"`
-	CPU             []int  `json:"CPU"`
-	CPUModel        string `json:"CPUModel"`
-	PhysicalCores   int    `json:"PhysicalCores"`
-	LogicalCores    int    `json:"LogicalCores"`
-	MemTotal        uint64 `json:"MemTotal"`
-	SwapTotal       uint64 `json:"SwapTotal"`
-}
-
-type AkileHostState struct {
-	CPU                 float64      `json:"CPU"`
-	MemUsed             uint64       `json:"MemUsed"`
-	SwapUsed            uint64       `json:"SwapUsed"`
-	DiskUsed            uint64       `json:"DiskUsed"`
-	DiskTotal           uint64       `json:"DiskTotal"`
-	Disks               []agent.Disk `json:"Disks"`
-	NetInTransfer       uint64       `json:"NetInTransfer"`
-	NetOutTransfer      uint64       `json:"NetOutTransfer"`
-	NetInSpeed          uint64       `json:"NetInSpeed"`
-	NetOutSpeed         uint64       `json:"NetOutSpeed"`
-	DiskReadSpeed       uint64       `json:"DiskReadSpeed"`
-	DiskWriteSpeed      uint64       `json:"DiskWriteSpeed"`
-	TCP                 int          `json:"TCP"`
-	UDP                 int          `json:"UDP"`
-	Processes           int          `json:"Processes"`
-	Load1               float64      `json:"Load1"`
-	Load5               float64      `json:"Load5"`
-	Load15              float64      `json:"Load15"`
-	Uptime              uint64       `json:"Uptime"`
-	CycleNetInTransfer  uint64       `json:"CycleNetInTransfer"`
-	CycleNetOutTransfer uint64       `json:"CycleNetOutTransfer"`
-	TrafficResetDay     int          `json:"TrafficResetDay"`
-	TrafficPeriodStart  int64        `json:"TrafficPeriodStart"`
-	TrafficNextReset    int64        `json:"TrafficNextReset"`
 }
 
 func NewStore(path string) (*Store, error) {
