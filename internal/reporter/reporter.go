@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -54,7 +55,16 @@ func (r *Reporter) Send(ctx context.Context, metrics agent.Metrics) error {
 	defer resp.Body.Close()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return fmt.Errorf("server returned %s", resp.Status)
+		return responseError(resp)
 	}
 	return nil
+}
+
+func responseError(resp *http.Response) error {
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+	message := strings.TrimSpace(string(body))
+	if message == "" {
+		return fmt.Errorf("server returned %s", resp.Status)
+	}
+	return fmt.Errorf("server returned %s: %s", resp.Status, message)
 }
