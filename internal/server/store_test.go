@@ -1,7 +1,9 @@
 package server
 
 import (
+	"compress/gzip"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -623,6 +625,42 @@ func TestPublicReadEndpointsRequireGet(t *testing.T) {
 	decodeJSONResponse(t, nodesGetResp, &nodes)
 	if len(nodes) != 1 || nodes[0].Host.Name != nodeID {
 		t.Fatalf("nodes response = %#v", nodes)
+	}
+}
+
+func TestStaticFallbackUsesIndexHeadersAndCompression(t *testing.T) {
+	s := newTestServer(t)
+
+	req := httptest.NewRequest(http.MethodGet, "https://monitor.example.com/dashboard/app.js", nil)
+	req.Header.Set("Accept-Encoding", "br, gzip")
+	resp := httptest.NewRecorder()
+	s.handleStatic(resp, req)
+	if resp.Code != http.StatusOK {
+		t.Fatalf("static fallback status = %d body = %s", resp.Code, resp.Body.String())
+	}
+	if got := resp.Header().Get("Cache-Control"); got != "no-cache" {
+		t.Fatalf("static fallback cache control = %q", got)
+	}
+	if got := resp.Header().Get("Content-Type"); !strings.Contains(got, "text/html") {
+		t.Fatalf("static fallback content type = %q", got)
+	}
+	if got := resp.Header().Get("Content-Encoding"); got != "gzip" {
+		t.Fatalf("static fallback content encoding = %q", got)
+	}
+	if got := resp.Header().Get("Vary"); got != "Accept-Encoding" {
+		t.Fatalf("static fallback vary = %q", got)
+	}
+	gz, err := gzip.NewReader(resp.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer gz.Close()
+	data, err := io.ReadAll(gz)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), `<div id="app"></div>`) {
+		t.Fatalf("static fallback body is not index html: %s", string(data))
 	}
 }
 

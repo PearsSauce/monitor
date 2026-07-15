@@ -676,6 +676,7 @@ func (s *Server) handleStatic(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "frontend is not built; run npm install && npm run build in web", http.StatusNotFound)
 			return
 		}
+		path = "index.html"
 	}
 	setStaticCache(w, path)
 	if ext := filepath.Ext(path); ext != "" {
