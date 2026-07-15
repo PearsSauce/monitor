@@ -448,12 +448,6 @@ sudo ./uninstall-agent-linux.sh
 
 ## 本地开发
 
-Codex 需要和 GitHub 交互时，先按 [Codex GitHub Workflow](docs/codex-github.md) 配好本机 `gh`，再运行：
-
-```bash
-sh scripts/check-github-cli.sh
-```
-
 运行中心端：
 
 ```bash
