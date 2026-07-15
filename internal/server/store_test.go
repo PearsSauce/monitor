@@ -674,6 +674,40 @@ func TestWebSocketEndpointRequiresGetAndUpgrade(t *testing.T) {
 	if !strings.Contains(getResp.Body.String(), "not websocket") {
 		t.Fatalf("plain get websocket body = %s", getResp.Body.String())
 	}
+
+	invalidKeyReq := httptest.NewRequest(http.MethodGet, "https://monitor.example.com/ws", nil)
+	invalidKeyReq.Header.Set("Upgrade", "websocket")
+	invalidKeyReq.Header.Set("Sec-WebSocket-Key", "not-a-valid-key")
+	invalidKeyResp := httptest.NewRecorder()
+	s.handleWS(invalidKeyResp, invalidKeyReq)
+	if invalidKeyResp.Code != http.StatusBadRequest {
+		t.Fatalf("invalid key websocket status = %d body = %s", invalidKeyResp.Code, invalidKeyResp.Body.String())
+	}
+	if !strings.Contains(invalidKeyResp.Body.String(), "invalid websocket key") {
+		t.Fatalf("invalid key websocket body = %s", invalidKeyResp.Body.String())
+	}
+}
+
+func TestValidWebSocketKey(t *testing.T) {
+	tests := []struct {
+		name string
+		key  string
+		want bool
+	}{
+		{name: "rfc example", key: "dGhlIHNhbXBsZSBub25jZQ==", want: true},
+		{name: "empty", key: "", want: false},
+		{name: "not base64", key: "not-a-valid-key", want: false},
+		{name: "too short", key: "c2hvcnQ=", want: false},
+		{name: "too long", key: "dGhlIHNhbXBsZSBub25jZTEyMzQ=", want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := validWebSocketKey(tt.key); got != tt.want {
+				t.Fatalf("validWebSocketKey(%q) = %v, want %v", tt.key, got, tt.want)
+			}
+		})
+	}
 }
 
 func TestWebSocketAcceptMatchesRFCExample(t *testing.T) {
