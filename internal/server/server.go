@@ -25,7 +25,6 @@ import (
 
 	"vps-agent/internal/agent"
 	serverapp "vps-agent/internal/server/application"
-	serverdomain "vps-agent/internal/server/domain"
 )
 
 type Config struct {
@@ -862,78 +861,6 @@ func withCORS(next http.Handler, allowedOrigins []string) http.Handler {
 		}
 		next.ServeHTTP(w, r)
 	})
-}
-
-func toAkileHost(m agent.Metrics, traffic TrafficStat) AkileHost {
-	diskUsed := uint64(0)
-	diskTotal := uint64(0)
-	for _, disk := range m.Disks {
-		diskUsed += disk.Used
-		diskTotal += disk.Total
-	}
-	platform := m.OS
-	if m.OSName != "" {
-		platform = m.OSName
-	}
-	if platform == "" {
-		platform = "unknown"
-	}
-	conns := agent.Connections{}
-	if m.Conns != nil {
-		conns = *m.Conns
-	}
-	return AkileHost{
-		Host: AkileHostMeta{
-			Name:            m.NodeID,
-			Hostname:        m.Hostname,
-			Platform:        platform,
-			PlatformVersion: m.Kernel,
-			Kernel:          m.Kernel,
-			Arch:            m.Arch,
-			Virtualization:  m.Virtualization,
-			CPU:             make([]int, m.CPU.Cores),
-			CPUModel:        m.CPU.ModelName,
-			PhysicalCores:   m.CPU.PhysicalCores,
-			LogicalCores:    m.CPU.Cores,
-			MemTotal:        m.Memory.Total,
-			SwapTotal:       m.Swap.Total,
-		},
-		State: AkileHostState{
-			CPU:                 m.CPU.UsagePercent,
-			MemUsed:             m.Memory.Used,
-			SwapUsed:            m.Swap.Used,
-			DiskUsed:            diskUsed,
-			DiskTotal:           diskTotal,
-			Disks:               m.Disks,
-			NetInTransfer:       m.Network.RxBytes,
-			NetOutTransfer:      m.Network.TxBytes,
-			NetInSpeed:          m.Network.RxRate,
-			NetOutSpeed:         m.Network.TxRate,
-			DiskReadSpeed:       m.DiskIO.ReadRate,
-			DiskWriteSpeed:      m.DiskIO.WriteRate,
-			TCP:                 conns.TCP,
-			UDP:                 conns.UDP,
-			Processes:           m.Processes,
-			Load1:               m.Load.Load1,
-			Load5:               m.Load.Load5,
-			Load15:              m.Load.Load15,
-			Uptime:              m.Uptime,
-			CycleNetInTransfer:  traffic.RxTotal,
-			CycleNetOutTransfer: traffic.TxTotal,
-			TrafficResetDay:     serverdomain.NormalizeTrafficResetDay(traffic.ResetDay),
-			TrafficPeriodStart:  traffic.PeriodStart,
-			TrafficNextReset:    traffic.NextReset,
-		},
-		TimeStamp: m.Timestamp,
-	}
-}
-
-func offlineAkileHost(name string) AkileHost {
-	return AkileHost{
-		Host:      AkileHostMeta{Name: name, Platform: "pending", PlatformVersion: "", CPU: []int{}, MemTotal: 1},
-		State:     AkileHostState{},
-		TimeStamp: 0,
-	}
 }
 
 func shellQuote(value string) string {

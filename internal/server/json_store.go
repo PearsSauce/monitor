@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"vps-agent/internal/agent"
+	serverapp "vps-agent/internal/server/application"
 	serverdomain "vps-agent/internal/server/domain"
 )
 
@@ -170,13 +171,13 @@ func (s *Store) AkileHosts() []AkileHost {
 	defer s.mu.RUnlock()
 	out := make([]AkileHost, 0, len(s.Planned)+len(s.Reports))
 	for _, m := range s.Reports {
-		out = append(out, toAkileHost(m, s.Traffic[m.NodeID]))
+		out = append(out, serverapp.ToAkileHost(m, s.Traffic[m.NodeID]))
 	}
 	for name := range s.Planned {
 		if _, ok := s.Reports[name]; ok {
 			continue
 		}
-		out = append(out, offlineAkileHost(name))
+		out = append(out, serverapp.OfflineAkileHost(name))
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Host.Name < out[j].Host.Name })
 	return out

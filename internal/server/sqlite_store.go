@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"vps-agent/internal/agent"
+	serverapp "vps-agent/internal/server/application"
 	serverdomain "vps-agent/internal/server/domain"
 
 	_ "modernc.org/sqlite"
@@ -409,13 +410,13 @@ func (s *SQLiteStore) AkileHosts() []AkileHost {
 	}
 	out := make([]AkileHost, 0, len(planned)+len(reports))
 	for _, metrics := range reports {
-		out = append(out, toAkileHost(metrics, traffic[metrics.NodeID]))
+		out = append(out, serverapp.ToAkileHost(metrics, traffic[metrics.NodeID]))
 	}
 	for name := range planned {
 		if _, ok := reports[name]; ok {
 			continue
 		}
-		out = append(out, offlineAkileHost(name))
+		out = append(out, serverapp.OfflineAkileHost(name))
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Host.Name < out[j].Host.Name })
 	return out
