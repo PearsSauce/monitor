@@ -128,6 +128,76 @@ func TestAdminMeRequiresGetAndReportsSession(t *testing.T) {
 	}
 }
 
+func TestAdminLoginRequiresPostOriginAndCredentials(t *testing.T) {
+	s := newTestServer(t)
+	s.cfg.AdminUser = "admin"
+	s.cfg.AdminPass = "strong-admin-password"
+	s.cfg.CORSOrigins = []string{"https://panel.example.com"}
+
+	getReq := httptest.NewRequest(http.MethodGet, "https://monitor.example.com/api/admin/login", nil)
+	getResp := httptest.NewRecorder()
+	s.handleAdminLogin(getResp, getReq)
+	if getResp.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("get login status = %d body = %s", getResp.Code, getResp.Body.String())
+	}
+
+	badOriginReq := httptest.NewRequest(http.MethodPost, "https://monitor.example.com/api/admin/login", strings.NewReader("{"))
+	badOriginReq.Host = "monitor.example.com"
+	badOriginReq.Header.Set("Origin", "https://evil.example.com")
+	badOriginResp := httptest.NewRecorder()
+	s.handleAdminLogin(badOriginResp, badOriginReq)
+	if badOriginResp.Code != http.StatusForbidden {
+		t.Fatalf("bad-origin login status = %d body = %s", badOriginResp.Code, badOriginResp.Body.String())
+	}
+	if cookies := badOriginResp.Result().Cookies(); len(cookies) != 0 {
+		t.Fatalf("bad-origin login set cookies: %#v", cookies)
+	}
+
+	badCredsReq := httptest.NewRequest(http.MethodPost, "https://monitor.example.com/api/admin/login", strings.NewReader(`{"username":"admin","password":"wrong-password"}`))
+	badCredsReq.Host = "monitor.example.com"
+	badCredsReq.Header.Set("Origin", "https://monitor.example.com")
+	badCredsResp := httptest.NewRecorder()
+	s.handleAdminLogin(badCredsResp, badCredsReq)
+	if badCredsResp.Code != http.StatusUnauthorized {
+		t.Fatalf("bad-credentials login status = %d body = %s", badCredsResp.Code, badCredsResp.Body.String())
+	}
+	if cookies := badCredsResp.Result().Cookies(); len(cookies) != 0 {
+		t.Fatalf("bad-credentials login set cookies: %#v", cookies)
+	}
+
+	okReq := httptest.NewRequest(http.MethodPost, "https://monitor.example.com/api/admin/login", strings.NewReader(`{"username":"admin","password":"strong-admin-password"}`))
+	okReq.Host = "monitor.example.com"
+	okReq.Header.Set("Origin", "https://monitor.example.com")
+	okReq.Header.Set("X-Forwarded-Proto", "https")
+	okResp := httptest.NewRecorder()
+	s.handleAdminLogin(okResp, okReq)
+	if okResp.Code != http.StatusOK {
+		t.Fatalf("valid login status = %d body = %s", okResp.Code, okResp.Body.String())
+	}
+	var payload map[string]bool
+	decodeJSONResponse(t, okResp, &payload)
+	if !payload["ok"] {
+		t.Fatalf("valid login response = %#v", payload)
+	}
+	cookies := okResp.Result().Cookies()
+	if len(cookies) != 1 {
+		t.Fatalf("valid login cookies = %#v", cookies)
+	}
+	cookie := cookies[0]
+	if cookie.Name != "monitor_admin" || cookie.Value == "" || cookie.Path != "/" {
+		t.Fatalf("admin cookie identity = %#v", cookie)
+	}
+	if !cookie.HttpOnly || !cookie.Secure || cookie.SameSite != http.SameSiteLaxMode {
+		t.Fatalf("admin cookie security attributes = %#v", cookie)
+	}
+	if cookie.MaxAge != int((24 * time.Hour).Seconds()) {
+		t.Fatalf("admin cookie max age = %d", cookie.MaxAge)
+	}
+	if !s.sessions.Valid(cookie.Value) {
+		t.Fatal("valid login cookie should reference an active admin session")
+	}
+}
+
 func TestAgentPingRequiresGetAndValidNodeToken(t *testing.T) {
 	s := newTestServer(t)
 	const nodeID = "CN-ping-001"
