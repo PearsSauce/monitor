@@ -217,6 +217,14 @@ func (s *Server) handleAdminLogin(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleAdminLogout(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		methodNotAllowed(w)
+		return
+	}
+	if !s.validAdminOrigin(r) {
+		http.Error(w, "invalid request origin", http.StatusForbidden)
+		return
+	}
 	if cookie, err := r.Cookie("monitor_admin"); err == nil {
 		s.sessions.Delete(cookie.Value)
 	}
@@ -309,6 +317,14 @@ func (s *Server) handleAdminNodesImport(w http.ResponseWriter, r *http.Request) 
 func (s *Server) handleAdminInstallCommand(w http.ResponseWriter, r *http.Request) {
 	if !s.adminAuthorized(r) {
 		http.Error(w, "admin login required", http.StatusUnauthorized)
+		return
+	}
+	if r.Method != http.MethodPost {
+		methodNotAllowed(w)
+		return
+	}
+	if !s.validAdminOrigin(r) {
+		http.Error(w, "invalid request origin", http.StatusForbidden)
 		return
 	}
 	nodeID := strings.TrimSpace(r.URL.Query().Get("node_id"))

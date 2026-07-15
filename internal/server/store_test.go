@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -84,6 +85,94 @@ func TestWithCORSAllowsSameHostAndConfiguredOrigin(t *testing.T) {
 	handler.ServeHTTP(blockedResp, blockedReq)
 	if blockedResp.Code != http.StatusForbidden {
 		t.Fatalf("blocked status = %d", blockedResp.Code)
+	}
+}
+
+func TestAdminLogoutRequiresPostAndValidOrigin(t *testing.T) {
+	s := newTestServer(t)
+	token, err := s.sessions.Create()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	getReq := authedAdminRequest(http.MethodGet, "https://monitor.example.com/api/admin/logout", token)
+	getResp := httptest.NewRecorder()
+	s.handleAdminLogout(getResp, getReq)
+	if getResp.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("get logout status = %d", getResp.Code)
+	}
+	if !s.sessions.Valid(token) {
+		t.Fatal("GET logout should not delete the admin session")
+	}
+
+	badOriginReq := authedAdminRequest(http.MethodPost, "https://monitor.example.com/api/admin/logout", token)
+	badOriginReq.Header.Set("Origin", "https://evil.example.com")
+	badOriginResp := httptest.NewRecorder()
+	s.handleAdminLogout(badOriginResp, badOriginReq)
+	if badOriginResp.Code != http.StatusForbidden {
+		t.Fatalf("bad-origin logout status = %d", badOriginResp.Code)
+	}
+	if !s.sessions.Valid(token) {
+		t.Fatal("bad-origin logout should not delete the admin session")
+	}
+
+	okReq := authedAdminRequest(http.MethodPost, "https://monitor.example.com/api/admin/logout", token)
+	okReq.Header.Set("Origin", "https://monitor.example.com")
+	okResp := httptest.NewRecorder()
+	s.handleAdminLogout(okResp, okReq)
+	if okResp.Code != http.StatusOK {
+		t.Fatalf("post logout status = %d body = %s", okResp.Code, okResp.Body.String())
+	}
+	if s.sessions.Valid(token) {
+		t.Fatal("POST logout should delete the admin session")
+	}
+}
+
+func TestAdminInstallCommandRequiresPostAndValidOrigin(t *testing.T) {
+	s := newTestServer(t)
+	token, err := s.sessions.Create()
+	if err != nil {
+		t.Fatal(err)
+	}
+	const nodeID = "CN-test-001"
+
+	getReq := authedAdminRequest(http.MethodGet, "https://monitor.example.com/api/admin/install-command?node_id="+nodeID, token)
+	getResp := httptest.NewRecorder()
+	s.handleAdminInstallCommand(getResp, getReq)
+	if getResp.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("get install-command status = %d", getResp.Code)
+	}
+	if got := s.store.ExportNodes().Nodes; len(got) != 0 {
+		t.Fatalf("GET install-command wrote nodes: %#v", got)
+	}
+
+	badOriginReq := authedAdminRequest(http.MethodPost, "https://monitor.example.com/api/admin/install-command?node_id="+nodeID, token)
+	badOriginReq.Header.Set("Origin", "https://evil.example.com")
+	badOriginResp := httptest.NewRecorder()
+	s.handleAdminInstallCommand(badOriginResp, badOriginReq)
+	if badOriginResp.Code != http.StatusForbidden {
+		t.Fatalf("bad-origin install-command status = %d", badOriginResp.Code)
+	}
+	if got := s.store.ExportNodes().Nodes; len(got) != 0 {
+		t.Fatalf("bad-origin install-command wrote nodes: %#v", got)
+	}
+
+	okReq := authedAdminRequest(http.MethodPost, "https://monitor.example.com/api/admin/install-command?node_id="+nodeID, token)
+	okReq.Header.Set("Origin", "https://monitor.example.com")
+	okResp := httptest.NewRecorder()
+	s.handleAdminInstallCommand(okResp, okReq)
+	if okResp.Code != http.StatusOK {
+		t.Fatalf("post install-command status = %d body = %s", okResp.Code, okResp.Body.String())
+	}
+	if !strings.Contains(okResp.Body.String(), "install/agent-linux.sh") {
+		t.Fatalf("install command response missing linux command: %s", okResp.Body.String())
+	}
+	backup := s.store.ExportNodes()
+	if len(backup.Nodes) != 1 {
+		t.Fatalf("backup nodes len = %d", len(backup.Nodes))
+	}
+	if backup.Nodes[0].NodeID != nodeID || backup.Nodes[0].TokenHash == "" {
+		t.Fatalf("backup node = %#v", backup.Nodes[0])
 	}
 }
 
@@ -236,6 +325,27 @@ func TestSQLiteStoreImportsExistingJSON(t *testing.T) {
 	if nodes[0].Info.TrafficResetDay != 15 {
 		t.Fatalf("traffic reset day = %d", nodes[0].Info.TrafficResetDay)
 	}
+}
+
+func newTestServer(t *testing.T) *Server {
+	t.Helper()
+	store, err := NewStore(filepath.Join(t.TempDir(), "server.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return &Server{
+		cfg:      Config{MaxNodes: 10, OfflineWait: time.Minute},
+		store:    store,
+		sessions: NewSessionStore(),
+		cache:    NewResponseCache(),
+	}
+}
+
+func authedAdminRequest(method, target, token string) *http.Request {
+	req := httptest.NewRequest(method, target, nil)
+	req.Host = "monitor.example.com"
+	req.AddCookie(&http.Cookie{Name: "monitor_admin", Value: token})
+	return req
 }
 
 func sampleMetrics(nodeID string, rxBytes, txBytes uint64) agent.Metrics {
