@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"vps-agent/internal/agent"
+	serverdomain "vps-agent/internal/server/domain"
 
 	_ "modernc.org/sqlite"
 )
@@ -184,7 +185,7 @@ func (s *SQLiteStore) importJSONStore(store *Store) error {
 	}
 	for _, info := range store.Infos {
 		info.AuthSecret = ""
-		info.TrafficResetDay = normalizeTrafficResetDay(info.TrafficResetDay)
+		info.TrafficResetDay = serverdomain.NormalizeTrafficResetDay(info.TrafficResetDay)
 		if err := upsertInfoTx(tx, info); err != nil {
 			return err
 		}
@@ -345,7 +346,7 @@ func (s *SQLiteStore) UpsertInfo(info HostInfo) error {
 	}
 	defer tx.Rollback()
 	info.AuthSecret = ""
-	info.TrafficResetDay = normalizeTrafficResetDay(info.TrafficResetDay)
+	info.TrafficResetDay = serverdomain.NormalizeTrafficResetDay(info.TrafficResetDay)
 	if err := upsertInfoTx(tx, info); err != nil {
 		return err
 	}
@@ -492,7 +493,7 @@ func (s *SQLiteStore) ExportNodes() NodeBackup {
 	for name := range names {
 		info := infos[name]
 		info.AuthSecret = ""
-		info.TrafficResetDay = normalizeTrafficResetDay(info.TrafficResetDay)
+		info.TrafficResetDay = serverdomain.NormalizeTrafficResetDay(info.TrafficResetDay)
 		out.Nodes = append(out.Nodes, NodeBackupRecord{NodeID: name, CreatedAt: planned[name].CreatedAt, TokenHash: planned[name].TokenHash, Info: info})
 	}
 	sort.Slice(out.Nodes, func(i, j int) bool { return out.Nodes[i].NodeID < out.Nodes[j].NodeID })
@@ -552,7 +553,7 @@ func (s *SQLiteStore) ImportNodes(backup NodeBackup, maxNodes int) (int, error) 
 		info := record.Info
 		info.Name = nodeID
 		info.AuthSecret = ""
-		info.TrafficResetDay = normalizeTrafficResetDay(info.TrafficResetDay)
+		info.TrafficResetDay = serverdomain.NormalizeTrafficResetDay(info.TrafficResetDay)
 		if err := upsertInfoTx(tx, info); err != nil {
 			return imported, err
 		}
@@ -602,7 +603,7 @@ func (s *SQLiteStore) loadInfos() (map[string]HostInfo, error) {
 		}
 		info.Name = nodeID
 		info.AuthSecret = ""
-		info.TrafficResetDay = normalizeTrafficResetDay(info.TrafficResetDay)
+		info.TrafficResetDay = serverdomain.NormalizeTrafficResetDay(info.TrafficResetDay)
 		out[nodeID] = info
 	}
 	return out, rows.Err()
@@ -731,15 +732,15 @@ func updateTrafficTx(tx *sql.Tx, metrics agent.Metrics, now time.Time) error {
 		return err
 	}
 	if !exists || stat.ResetDay == 0 {
-		start, next := trafficPeriod(now, resetDay)
+		start, next := serverdomain.TrafficPeriod(now, resetDay)
 		return upsertTrafficTx(tx, metrics.NodeID, TrafficStat{ResetDay: resetDay, PeriodStart: start.Unix(), NextReset: next.Unix(), LastRxBytes: metrics.Network.RxBytes, LastTxBytes: metrics.Network.TxBytes, UpdatedAt: now.Unix()})
 	}
 	if stat.ResetDay != resetDay {
 		stat.ResetDay = resetDay
-		stat.NextReset = nextTrafficReset(now, resetDay).Unix()
+		stat.NextReset = serverdomain.NextTrafficReset(now, resetDay).Unix()
 	}
 	if stat.NextReset == 0 || now.Unix() >= stat.NextReset {
-		start, next := trafficPeriod(now, resetDay)
+		start, next := serverdomain.TrafficPeriod(now, resetDay)
 		stat.PeriodStart = start.Unix()
 		stat.NextReset = next.Unix()
 		stat.RxTotal = 0
@@ -762,7 +763,7 @@ func updateTrafficTx(tx *sql.Tx, metrics agent.Metrics, now time.Time) error {
 }
 
 func syncTrafficResetDayTx(tx *sql.Tx, nodeID string, resetDay int, now time.Time) error {
-	resetDay = normalizeTrafficResetDay(resetDay)
+	resetDay = serverdomain.NormalizeTrafficResetDay(resetDay)
 	stat, exists, err := getTrafficTx(tx, nodeID)
 	if err != nil {
 		return err
@@ -771,9 +772,9 @@ func syncTrafficResetDayTx(tx *sql.Tx, nodeID string, resetDay int, now time.Tim
 		return nil
 	}
 	stat.ResetDay = resetDay
-	stat.NextReset = nextTrafficReset(now, resetDay).Unix()
+	stat.NextReset = serverdomain.NextTrafficReset(now, resetDay).Unix()
 	if stat.PeriodStart == 0 {
-		start, next := trafficPeriod(now, resetDay)
+		start, next := serverdomain.TrafficPeriod(now, resetDay)
 		stat.PeriodStart = start.Unix()
 		stat.NextReset = next.Unix()
 	}
@@ -793,7 +794,7 @@ func trafficResetDayTx(tx *sql.Tx, nodeID string) (int, error) {
 	if err := json.Unmarshal([]byte(payload), &info); err != nil {
 		return 1, err
 	}
-	return normalizeTrafficResetDay(info.TrafficResetDay), nil
+	return serverdomain.NormalizeTrafficResetDay(info.TrafficResetDay), nil
 }
 
 func getTrafficTx(tx *sql.Tx, nodeID string) (TrafficStat, bool, error) {
@@ -823,7 +824,7 @@ func getTrafficTx(tx *sql.Tx, nodeID string) (TrafficStat, bool, error) {
 }
 
 func upsertTrafficTx(tx *sql.Tx, nodeID string, stat TrafficStat) error {
-	stat.ResetDay = normalizeTrafficResetDay(stat.ResetDay)
+	stat.ResetDay = serverdomain.NormalizeTrafficResetDay(stat.ResetDay)
 	_, err := tx.Exec(`
 		INSERT OR REPLACE INTO traffic_stats(node_id, reset_day, period_start, next_reset, last_rx_bytes, last_tx_bytes, rx_total, tx_total, updated_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)

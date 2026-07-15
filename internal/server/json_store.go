@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"vps-agent/internal/agent"
+	serverdomain "vps-agent/internal/server/domain"
 )
 
 type Store struct {
@@ -137,7 +138,7 @@ func (s *Store) UpsertInfo(info HostInfo) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	info.AuthSecret = ""
-	info.TrafficResetDay = normalizeTrafficResetDay(info.TrafficResetDay)
+	info.TrafficResetDay = serverdomain.NormalizeTrafficResetDay(info.TrafficResetDay)
 	s.Infos[info.Name] = info
 	s.syncTrafficResetDayLocked(info.Name, info.TrafficResetDay)
 	return s.saveLocked()
@@ -228,7 +229,7 @@ func (s *Store) ExportNodes() NodeBackup {
 		planned := s.Planned[name]
 		info := s.Infos[name]
 		info.AuthSecret = ""
-		info.TrafficResetDay = normalizeTrafficResetDay(info.TrafficResetDay)
+		info.TrafficResetDay = serverdomain.NormalizeTrafficResetDay(info.TrafficResetDay)
 		out.Nodes = append(out.Nodes, NodeBackupRecord{NodeID: name, CreatedAt: planned.CreatedAt, TokenHash: planned.TokenHash, Info: info})
 	}
 	sort.Slice(out.Nodes, func(i, j int) bool { return out.Nodes[i].NodeID < out.Nodes[j].NodeID })
@@ -271,7 +272,7 @@ func (s *Store) ImportNodes(backup NodeBackup, maxNodes int) (int, error) {
 		info := record.Info
 		info.Name = nodeID
 		info.AuthSecret = ""
-		info.TrafficResetDay = normalizeTrafficResetDay(info.TrafficResetDay)
+		info.TrafficResetDay = serverdomain.NormalizeTrafficResetDay(info.TrafficResetDay)
 		s.Infos[nodeID] = info
 		s.syncTrafficResetDayLocked(nodeID, info.TrafficResetDay)
 		imported++
@@ -286,21 +287,21 @@ func (s *Store) ImportNodes(backup NodeBackup, maxNodes int) (int, error) {
 
 func (s *Store) updateTrafficLocked(metrics agent.Metrics) error {
 	now := time.Now()
-	resetDay := normalizeTrafficResetDay(s.Infos[metrics.NodeID].TrafficResetDay)
+	resetDay := serverdomain.NormalizeTrafficResetDay(s.Infos[metrics.NodeID].TrafficResetDay)
 	stat := s.Traffic[metrics.NodeID]
 	if stat.ResetDay == 0 {
-		start, next := trafficPeriod(now, resetDay)
+		start, next := serverdomain.TrafficPeriod(now, resetDay)
 		stat = TrafficStat{ResetDay: resetDay, PeriodStart: start.Unix(), NextReset: next.Unix(), LastRxBytes: metrics.Network.RxBytes, LastTxBytes: metrics.Network.TxBytes, UpdatedAt: now.Unix()}
 		s.Traffic[metrics.NodeID] = stat
 		return s.saveTrafficLocked(false, now)
 	}
 	if stat.ResetDay != resetDay {
 		stat.ResetDay = resetDay
-		stat.NextReset = nextTrafficReset(now, resetDay).Unix()
+		stat.NextReset = serverdomain.NextTrafficReset(now, resetDay).Unix()
 	}
 	resetHappened := false
 	if stat.NextReset == 0 || now.Unix() >= stat.NextReset {
-		start, next := trafficPeriod(now, resetDay)
+		start, next := serverdomain.TrafficPeriod(now, resetDay)
 		stat.PeriodStart = start.Unix()
 		stat.NextReset = next.Unix()
 		stat.RxTotal = 0
@@ -325,16 +326,16 @@ func (s *Store) updateTrafficLocked(metrics agent.Metrics) error {
 }
 
 func (s *Store) syncTrafficResetDayLocked(nodeID string, resetDay int) {
-	resetDay = normalizeTrafficResetDay(resetDay)
+	resetDay = serverdomain.NormalizeTrafficResetDay(resetDay)
 	stat := s.Traffic[nodeID]
 	if stat.ResetDay == resetDay {
 		return
 	}
 	now := time.Now()
 	stat.ResetDay = resetDay
-	stat.NextReset = nextTrafficReset(now, resetDay).Unix()
+	stat.NextReset = serverdomain.NextTrafficReset(now, resetDay).Unix()
 	if stat.PeriodStart == 0 {
-		start, next := trafficPeriod(now, resetDay)
+		start, next := serverdomain.TrafficPeriod(now, resetDay)
 		stat.PeriodStart = start.Unix()
 		stat.NextReset = next.Unix()
 	}

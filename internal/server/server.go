@@ -25,6 +25,7 @@ import (
 
 	"vps-agent/internal/agent"
 	serverapp "vps-agent/internal/server/application"
+	serverdomain "vps-agent/internal/server/domain"
 )
 
 type Config struct {
@@ -863,45 +864,6 @@ func withCORS(next http.Handler, allowedOrigins []string) http.Handler {
 	})
 }
 
-func normalizeTrafficResetDay(day int) int {
-	if day < 1 {
-		return 1
-	}
-	if day > 31 {
-		return 31
-	}
-	return day
-}
-
-func trafficPeriod(now time.Time, resetDay int) (time.Time, time.Time) {
-	resetDay = normalizeTrafficResetDay(resetDay)
-	current := resetTime(now.Year(), now.Month(), resetDay, now.Location())
-	if now.Before(current) {
-		prev := now.AddDate(0, -1, 0)
-		return resetTime(prev.Year(), prev.Month(), resetDay, now.Location()), current
-	}
-	next := now.AddDate(0, 1, 0)
-	return current, resetTime(next.Year(), next.Month(), resetDay, now.Location())
-}
-
-func nextTrafficReset(now time.Time, resetDay int) time.Time {
-	_, next := trafficPeriod(now, resetDay)
-	return next
-}
-
-func resetTime(year int, month time.Month, day int, loc *time.Location) time.Time {
-	day = normalizeTrafficResetDay(day)
-	lastDay := daysInMonth(year, month, loc)
-	if day > lastDay {
-		day = lastDay
-	}
-	return time.Date(year, month, day, 0, 0, 0, 0, loc)
-}
-
-func daysInMonth(year int, month time.Month, loc *time.Location) int {
-	return time.Date(year, month+1, 0, 0, 0, 0, 0, loc).Day()
-}
-
 func toAkileHost(m agent.Metrics, traffic TrafficStat) AkileHost {
 	diskUsed := uint64(0)
 	diskTotal := uint64(0)
@@ -958,7 +920,7 @@ func toAkileHost(m agent.Metrics, traffic TrafficStat) AkileHost {
 			Uptime:              m.Uptime,
 			CycleNetInTransfer:  traffic.RxTotal,
 			CycleNetOutTransfer: traffic.TxTotal,
-			TrafficResetDay:     normalizeTrafficResetDay(traffic.ResetDay),
+			TrafficResetDay:     serverdomain.NormalizeTrafficResetDay(traffic.ResetDay),
 			TrafficPeriodStart:  traffic.PeriodStart,
 			TrafficNextReset:    traffic.NextReset,
 		},
