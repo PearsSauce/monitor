@@ -530,6 +530,10 @@ func (s *Server) handleAdminPage(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleAgentLinuxInstaller(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		methodNotAllowed(w)
+		return
+	}
 	w.Header().Set("Content-Type", "text/x-shellscript; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-cache")
 	base := s.externalBase(r)
@@ -537,6 +541,10 @@ func (s *Server) handleAgentLinuxInstaller(w http.ResponseWriter, r *http.Reques
 }
 
 func (s *Server) handleAgentWindowsInstaller(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		methodNotAllowed(w)
+		return
+	}
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-cache")
 	base := s.externalBase(r)
@@ -544,20 +552,32 @@ func (s *Server) handleAgentWindowsInstaller(w http.ResponseWriter, r *http.Requ
 }
 
 func (s *Server) handleAgentLinuxUninstaller(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		methodNotAllowed(w)
+		return
+	}
 	w.Header().Set("Content-Type", "text/x-shellscript; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-cache")
 	_, _ = w.Write([]byte(linuxUninstallTemplate))
 }
 
 func (s *Server) handleAgentWindowsUninstaller(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		methodNotAllowed(w)
+		return
+	}
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-cache")
 	_, _ = w.Write([]byte(windowsUninstallTemplate))
 }
 
 func (s *Server) handleDownload(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		methodNotAllowed(w)
+		return
+	}
 	name := strings.TrimPrefix(r.URL.Path, "/download/")
-	if name == "" || strings.Contains(name, "/") || strings.Contains(name, "\\") {
+	if !validDownloadName(name) {
 		http.Error(w, "not found", http.StatusNotFound)
 		return
 	}
@@ -570,6 +590,19 @@ func (s *Server) handleDownload(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Disposition", "attachment; filename=\""+name+"\"")
 	w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
 	_, _ = w.Write(data)
+}
+
+func validDownloadName(name string) bool {
+	if name == "" || len(name) > 128 {
+		return false
+	}
+	for _, r := range name {
+		if r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '.' || r == '-' || r == '_' {
+			continue
+		}
+		return false
+	}
+	return true
 }
 
 func (s *Server) handleNodes(w http.ResponseWriter, r *http.Request) {

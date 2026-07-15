@@ -451,6 +451,58 @@ func TestPublicReadEndpointsRequireGet(t *testing.T) {
 	}
 }
 
+func TestPublicResourceEndpointsRequireGetAndSafeDownloadName(t *testing.T) {
+	s := newTestServer(t)
+
+	installerPostReq := httptest.NewRequest(http.MethodPost, "https://monitor.example.com/install/agent-linux.sh", nil)
+	installerPostResp := httptest.NewRecorder()
+	s.handleAgentLinuxInstaller(installerPostResp, installerPostReq)
+	if installerPostResp.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("installer POST status = %d body = %s", installerPostResp.Code, installerPostResp.Body.String())
+	}
+
+	installerGetReq := httptest.NewRequest(http.MethodGet, "https://monitor.example.com/install/agent-linux.sh", nil)
+	installerGetReq.Host = "monitor.example.com"
+	installerGetResp := httptest.NewRecorder()
+	s.handleAgentLinuxInstaller(installerGetResp, installerGetReq)
+	if installerGetResp.Code != http.StatusOK {
+		t.Fatalf("installer GET status = %d body = %s", installerGetResp.Code, installerGetResp.Body.String())
+	}
+	if !strings.Contains(installerGetResp.Body.String(), "monitor.example.com") {
+		t.Fatalf("installer body missing external base: %s", installerGetResp.Body.String())
+	}
+	if got := installerGetResp.Header().Get("Cache-Control"); got != "no-cache" {
+		t.Fatalf("installer cache control = %q", got)
+	}
+
+	downloadPostReq := httptest.NewRequest(http.MethodPost, "https://monitor.example.com/download/vps-agent-linux-amd64", nil)
+	downloadPostResp := httptest.NewRecorder()
+	s.handleDownload(downloadPostResp, downloadPostReq)
+	if downloadPostResp.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("download POST status = %d body = %s", downloadPostResp.Code, downloadPostResp.Body.String())
+	}
+
+	invalidDownloadReq := httptest.NewRequest(http.MethodGet, "https://monitor.example.com/download/bad%22name", nil)
+	invalidDownloadResp := httptest.NewRecorder()
+	s.handleDownload(invalidDownloadResp, invalidDownloadReq)
+	if invalidDownloadResp.Code != http.StatusNotFound {
+		t.Fatalf("invalid download status = %d body = %s", invalidDownloadResp.Code, invalidDownloadResp.Body.String())
+	}
+
+	downloadGetReq := httptest.NewRequest(http.MethodGet, "https://monitor.example.com/download/vps-agent-linux-amd64", nil)
+	downloadGetResp := httptest.NewRecorder()
+	s.handleDownload(downloadGetResp, downloadGetReq)
+	if downloadGetResp.Code != http.StatusOK {
+		t.Fatalf("download GET status = %d body = %s", downloadGetResp.Code, downloadGetResp.Body.String())
+	}
+	if got := downloadGetResp.Header().Get("Content-Disposition"); got != `attachment; filename="vps-agent-linux-amd64"` {
+		t.Fatalf("download content disposition = %q", got)
+	}
+	if downloadGetResp.Body.Len() == 0 {
+		t.Fatal("download body is empty")
+	}
+}
+
 func TestAgentAuthorizationRequiresBearerToken(t *testing.T) {
 	s := newTestServer(t)
 	const nodeID = "CN-agent-001"
