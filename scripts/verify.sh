@@ -15,6 +15,7 @@ echo "== Go build =="
 go build ./cmd/vps-server ./cmd/vps-agent
 
 GOVULNCHECK_BIN="${GOVULNCHECK:-govulncheck}"
+GOVULNCHECK_VERSION="${GOVULNCHECK_VERSION:-v1.5.0}"
 if ! command -v "$GOVULNCHECK_BIN" >/dev/null 2>&1 && [ -x "$(go env GOPATH)/bin/govulncheck" ]; then
   GOVULNCHECK_BIN="$(go env GOPATH)/bin/govulncheck"
 fi
@@ -24,7 +25,7 @@ if command -v "$GOVULNCHECK_BIN" >/dev/null 2>&1; then
   "$GOVULNCHECK_BIN" ./...
 else
   echo "== Go vulnerability scan =="
-  echo "govulncheck not found; install with: go install golang.org/x/vuln/cmd/govulncheck@latest"
+  echo "govulncheck not found; install with: go install golang.org/x/vuln/cmd/govulncheck@${GOVULNCHECK_VERSION}"
 fi
 
 echo "== Web checks =="
