@@ -938,7 +938,7 @@ a {
   box-shadow: 0 2px 4px 0 rgba(133, 138, 180, 0.14);
   border-radius: 4px;
 
-  :deep(.arco-tabs-content) {
+  .arco-tabs-content {
     display: none;
   }
 }

@@ -45,11 +45,22 @@ export default defineConfig(({ command }) => ({
   build: {
     rollupOptions: {
       output: {
-        manualChunks: {
-          arco: ['@arco-design/web-vue'],
-          charts: ['highcharts'],
-          vue: ['vue', 'vue-i18n'],
-          vendor: ['axios', 'moment'],
+        manualChunks(id) {
+          if (!id.includes('node_modules')) {
+            return
+          }
+          if (id.includes('@arco-design/web-vue')) {
+            return 'arco'
+          }
+          if (id.includes('highcharts')) {
+            return 'charts'
+          }
+          if (id.includes('/vue/') || id.includes('/vue-i18n/')) {
+            return 'vue'
+          }
+          if (id.includes('/axios/') || id.includes('/moment/')) {
+            return 'vendor'
+          }
         },
       },
     },
