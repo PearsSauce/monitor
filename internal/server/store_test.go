@@ -200,6 +200,33 @@ func TestAdminLoginRequiresPostOriginAndCredentials(t *testing.T) {
 	}
 }
 
+func TestAdminPageRequiresGetAndNoCache(t *testing.T) {
+	s := newTestServer(t)
+
+	postReq := httptest.NewRequest(http.MethodPost, "https://monitor.example.com/admin", nil)
+	postResp := httptest.NewRecorder()
+	s.handleAdminPage(postResp, postReq)
+	if postResp.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("post admin page status = %d body = %s", postResp.Code, postResp.Body.String())
+	}
+
+	getReq := httptest.NewRequest(http.MethodGet, "https://monitor.example.com/admin", nil)
+	getResp := httptest.NewRecorder()
+	s.handleAdminPage(getResp, getReq)
+	if getResp.Code != http.StatusOK {
+		t.Fatalf("get admin page status = %d body = %s", getResp.Code, getResp.Body.String())
+	}
+	if got := getResp.Header().Get("Content-Type"); got != "text/html; charset=utf-8" {
+		t.Fatalf("admin page content type = %q", got)
+	}
+	if got := getResp.Header().Get("Cache-Control"); got != "no-cache" {
+		t.Fatalf("admin page cache control = %q", got)
+	}
+	if !strings.Contains(getResp.Body.String(), `monitor-admin-marker`) {
+		t.Fatalf("admin page body missing marker: %s", getResp.Body.String())
+	}
+}
+
 func TestAgentPingRequiresGetAndValidNodeToken(t *testing.T) {
 	s := newTestServer(t)
 	const nodeID = "CN-ping-001"
@@ -630,6 +657,13 @@ func TestPublicReadEndpointsRequireGet(t *testing.T) {
 
 func TestStaticFallbackUsesIndexHeadersAndCompression(t *testing.T) {
 	s := newTestServer(t)
+
+	postReq := httptest.NewRequest(http.MethodPost, "https://monitor.example.com/dashboard/app.js", nil)
+	postResp := httptest.NewRecorder()
+	s.handleStatic(postResp, postReq)
+	if postResp.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("static fallback POST status = %d body = %s", postResp.Code, postResp.Body.String())
+	}
 
 	req := httptest.NewRequest(http.MethodGet, "https://monitor.example.com/dashboard/app.js", nil)
 	req.Header.Set("Accept-Encoding", "br, gzip")
