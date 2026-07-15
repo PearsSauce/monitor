@@ -234,6 +234,10 @@ func (s *Server) handleAdminLogout(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleAdminMe(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		methodNotAllowed(w)
+		return
+	}
 	writeJSON(w, map[string]bool{"authenticated": s.adminAuthorized(r)})
 }
 

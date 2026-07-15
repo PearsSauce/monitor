@@ -89,6 +89,45 @@ func TestWithCORSAllowsSameHostAndConfiguredOrigin(t *testing.T) {
 	}
 }
 
+func TestAdminMeRequiresGetAndReportsSession(t *testing.T) {
+	s := newTestServer(t)
+
+	postReq := httptest.NewRequest(http.MethodPost, "https://monitor.example.com/api/admin/me", nil)
+	postResp := httptest.NewRecorder()
+	s.handleAdminMe(postResp, postReq)
+	if postResp.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("post admin me status = %d body = %s", postResp.Code, postResp.Body.String())
+	}
+
+	guestReq := httptest.NewRequest(http.MethodGet, "https://monitor.example.com/api/admin/me", nil)
+	guestResp := httptest.NewRecorder()
+	s.handleAdminMe(guestResp, guestReq)
+	if guestResp.Code != http.StatusOK {
+		t.Fatalf("guest admin me status = %d body = %s", guestResp.Code, guestResp.Body.String())
+	}
+	var guest map[string]bool
+	decodeJSONResponse(t, guestResp, &guest)
+	if guest["authenticated"] {
+		t.Fatalf("guest admin me response = %#v", guest)
+	}
+
+	token, err := s.sessions.Create()
+	if err != nil {
+		t.Fatal(err)
+	}
+	authedReq := authedAdminRequest(http.MethodGet, "https://monitor.example.com/api/admin/me", token)
+	authedResp := httptest.NewRecorder()
+	s.handleAdminMe(authedResp, authedReq)
+	if authedResp.Code != http.StatusOK {
+		t.Fatalf("authed admin me status = %d body = %s", authedResp.Code, authedResp.Body.String())
+	}
+	var authed map[string]bool
+	decodeJSONResponse(t, authedResp, &authed)
+	if !authed["authenticated"] {
+		t.Fatalf("authed admin me response = %#v", authed)
+	}
+}
+
 func TestAdminLogoutRequiresPostAndValidOrigin(t *testing.T) {
 	s := newTestServer(t)
 	token, err := s.sessions.Create()
