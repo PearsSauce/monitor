@@ -32,5 +32,4 @@ cd "$ROOT/web"
 if [ "${SKIP_NPM_CI:-0}" != "1" ]; then
   npm ci
 fi
-npm audit --audit-level=moderate
-npm run build
+npm run check

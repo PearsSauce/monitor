@@ -7,7 +7,8 @@
     "dev": "vite --host",
     "build": "vite build",
     "audit": "npm audit --audit-level=moderate",
-    "check": "npm run audit && npm run build",
+    "test:monitor-utils": "node scripts/check-monitor-utils.mjs",
+    "check": "npm run audit && npm run test:monitor-utils && npm run build",
     "preview": "vite preview"
   },
   "dependencies": {

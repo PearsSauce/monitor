@@ -5,7 +5,7 @@ import axios from "axios";
 import Message from "@arco-design/web-vue/es/message";
 import StatsCard from "@/components/StatsCard.vue";
 import {formatAgo, formatBytes, formatDateStamp, formatTimeStamp, formatUptime, formatUptimeZh, calculateRemainingDays} from '@/utils/utils'
-import {normalizeAPIURL, normalizeMonitorHosts, regionFlag} from '@/utils/monitor'
+import {getHostChartSeries, normalizeAPIURL, normalizeMonitorHosts, regionFlag} from '@/utils/monitor'
 import HeaderLocale from "@/components/HeaderLocale.vue";
 import {useI18n} from "vue-i18n";
 
@@ -242,10 +242,13 @@ const hostInfo = ref({})
 const handleFetchHostInfo = async () => {
   try {
     const res = await axios.get(`${apiURL.value}/info`)
-    hostInfo.value = {}
-    res.data.forEach((item) => {
-      hostInfo.value[item.name] = item
+    const nextHostInfo = {}
+    ;(Array.isArray(res.data) ? res.data : []).forEach((item) => {
+      if (item?.name) {
+        nextHostInfo[item.name] = item
+      }
     })
+    hostInfo.value = nextHostInfo
   } catch (e) {
     // Message.error('删除失败，管理密钥错误')
   }
@@ -256,8 +259,11 @@ const handleChangeType = (value) => {
 }
 
 const getHostInfo = (name) => {
-  return hostInfo.value[name] || hostInfo.value[name.trim()] || {}
+  const key = String(name || '')
+  return hostInfo.value[key] || hostInfo.value[key.trim()] || {}
 }
+
+const chartSeries = (name) => getHostChartSeries(charts.value, name)
 
 const diskPercent = (item) => {
   if (!item.State.DiskTotal) return 0
@@ -517,16 +523,16 @@ provide('handleChangeType', handleChangeType)
             <a-col :span="14" :xs="24" :sm="24" :md="14" :lg="14" :sl="14">
               <a-row :gutter="20">
                 <a-col :span="12" :xs="24" :sm="24" :md="12" :lg="12" :sl="12">
-                  <CPU ref="cpuRef" style="margin-bottom: 20px;" :data="charts[item.Host.Name].cpu" />
+                  <CPU ref="cpuRef" style="margin-bottom: 20px;" :data="chartSeries(item.Host.Name).cpu" />
                 </a-col>
                 <a-col :span="12" :xs="24" :sm="24" :md="12" :lg="12" :sl="12">
-                  <Mem ref="memRef" :max="item.Host.MemTotal" style="margin-bottom: 20px;" :data="charts[item.Host.Name].mem" />
+                  <Mem ref="memRef" :max="item.Host.MemTotal" style="margin-bottom: 20px;" :data="chartSeries(item.Host.Name).mem" />
                 </a-col>
                 <a-col :span="12" :xs="24" :sm="24" :md="12" :lg="12" :sl="12">
-                  <NetIn ref="netInRef" :data="charts[item.Host.Name].net_in" />
+                  <NetIn ref="netInRef" :data="chartSeries(item.Host.Name).net_in" />
                 </a-col>
                 <a-col :span="12" :xs="24" :sm="24" :md="12" :lg="12" :sl="12">
-                  <NetOut ref="netOutRef" :data="charts[item.Host.Name].net_out" />
+                  <NetOut ref="netOutRef" :data="chartSeries(item.Host.Name).net_out" />
                 </a-col>
               </a-row>
             </a-col>
