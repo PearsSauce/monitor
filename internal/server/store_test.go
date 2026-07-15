@@ -489,6 +489,35 @@ func TestAgentAuthorizationRequiresBearerToken(t *testing.T) {
 	}
 }
 
+func TestAgentReportNormalizesAuthorizedNodeID(t *testing.T) {
+	s := newTestServer(t)
+	const nodeID = "CN-agent-report-001"
+	const token = "agent-token"
+	if err := s.store.SetNodeToken(nodeID, hashToken(token), 10); err != nil {
+		t.Fatal(err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "https://monitor.example.com/api/agent/report", strings.NewReader(`{}`))
+	req.Header.Set("X-Node-ID", "  "+nodeID+"  ")
+	req.Header.Set("Authorization", "Bearer "+token)
+	resp := httptest.NewRecorder()
+	s.handleAgentReport(resp, req)
+	if resp.Code != http.StatusOK {
+		t.Fatalf("agent report status = %d body = %s", resp.Code, resp.Body.String())
+	}
+
+	backup := s.store.ExportNodes()
+	if len(backup.Nodes) != 1 {
+		t.Fatalf("backup nodes len = %d", len(backup.Nodes))
+	}
+	if backup.Nodes[0].NodeID != nodeID {
+		t.Fatalf("reported node id = %q", backup.Nodes[0].NodeID)
+	}
+	if got := s.store.AdminNodes(time.Minute); len(got) != 1 || got[0].NodeID != nodeID || !got[0].Online {
+		t.Fatalf("admin nodes after report = %#v", got)
+	}
+}
+
 func TestStoreBackendsNodeLifecycle(t *testing.T) {
 	tests := []struct {
 		name    string

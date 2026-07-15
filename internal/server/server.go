@@ -397,7 +397,7 @@ func (s *Server) handleAgentReport(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	metrics.NodeID = r.Header.Get("X-Node-ID")
+	metrics.NodeID = strings.TrimSpace(r.Header.Get("X-Node-ID"))
 	if !validNodeID(metrics.NodeID) {
 		http.Error(w, "invalid node_id", http.StatusBadRequest)
 		return
