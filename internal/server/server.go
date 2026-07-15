@@ -20,6 +20,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -1724,7 +1725,22 @@ func (c *ResponseCache) Get(build func() []byte) []byte {
 }
 
 func acceptsGzip(r *http.Request) bool {
-	return strings.Contains(r.Header.Get("Accept-Encoding"), "gzip")
+	for _, part := range strings.Split(r.Header.Get("Accept-Encoding"), ",") {
+		encoding, params, _ := strings.Cut(strings.TrimSpace(part), ";")
+		if !strings.EqualFold(strings.TrimSpace(encoding), "gzip") {
+			continue
+		}
+		for _, param := range strings.Split(params, ";") {
+			key, value, ok := strings.Cut(strings.TrimSpace(param), "=")
+			if !ok || !strings.EqualFold(strings.TrimSpace(key), "q") {
+				continue
+			}
+			q, err := strconv.ParseFloat(strings.TrimSpace(value), 64)
+			return err != nil || q > 0
+		}
+		return true
+	}
+	return false
 }
 
 func shouldGzip(path string) bool {

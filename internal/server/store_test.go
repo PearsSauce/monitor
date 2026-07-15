@@ -664,6 +664,32 @@ func TestStaticFallbackUsesIndexHeadersAndCompression(t *testing.T) {
 	}
 }
 
+func TestAcceptsGzipHonorsEncodingTokensAndQValues(t *testing.T) {
+	tests := []struct {
+		name   string
+		header string
+		want   bool
+	}{
+		{name: "empty", header: "", want: false},
+		{name: "plain gzip", header: "gzip", want: true},
+		{name: "case insensitive gzip", header: "br, GZip", want: true},
+		{name: "gzip with positive q", header: "br;q=1, gzip;q=0.5", want: true},
+		{name: "gzip disabled", header: "br, gzip;q=0", want: false},
+		{name: "gzip token only", header: "xgzip", want: false},
+		{name: "gzip suffix only", header: "br, gzip-extra", want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "https://monitor.example.com/", nil)
+			req.Header.Set("Accept-Encoding", tt.header)
+			if got := acceptsGzip(req); got != tt.want {
+				t.Fatalf("acceptsGzip(%q) = %v, want %v", tt.header, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestPublicResourceEndpointsRequireGetAndSafeDownloadName(t *testing.T) {
 	s := newTestServer(t)
 
