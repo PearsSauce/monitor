@@ -623,6 +623,10 @@ func (s *Server) handleNodes(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		methodNotAllowed(w)
+		return
+	}
 	conn, rw, err := upgradeWebSocket(w, r)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)

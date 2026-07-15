@@ -655,6 +655,35 @@ func TestPublicReadEndpointsRequireGet(t *testing.T) {
 	}
 }
 
+func TestWebSocketEndpointRequiresGetAndUpgrade(t *testing.T) {
+	s := newTestServer(t)
+
+	postReq := httptest.NewRequest(http.MethodPost, "https://monitor.example.com/ws", nil)
+	postResp := httptest.NewRecorder()
+	s.handleWS(postResp, postReq)
+	if postResp.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("post websocket status = %d body = %s", postResp.Code, postResp.Body.String())
+	}
+
+	getReq := httptest.NewRequest(http.MethodGet, "https://monitor.example.com/ws", nil)
+	getResp := httptest.NewRecorder()
+	s.handleWS(getResp, getReq)
+	if getResp.Code != http.StatusBadRequest {
+		t.Fatalf("plain get websocket status = %d body = %s", getResp.Code, getResp.Body.String())
+	}
+	if !strings.Contains(getResp.Body.String(), "not websocket") {
+		t.Fatalf("plain get websocket body = %s", getResp.Body.String())
+	}
+}
+
+func TestWebSocketAcceptMatchesRFCExample(t *testing.T) {
+	const key = "dGhlIHNhbXBsZSBub25jZQ=="
+	const want = "s3pPLMBiTxaQ9kYGzzhZRbK+xOo="
+	if got := websocketAccept(key); got != want {
+		t.Fatalf("websocketAccept(%q) = %q, want %q", key, got, want)
+	}
+}
+
 func TestStaticFallbackUsesIndexHeadersAndCompression(t *testing.T) {
 	s := newTestServer(t)
 
