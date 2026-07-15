@@ -13,7 +13,6 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
-	"log"
 	"mime"
 	"net"
 	"net/http"
@@ -34,6 +33,8 @@ type Config struct {
 	AdminUser   string
 	AdminPass   string
 	DataPath    string
+	StoreDriver string
+	DBPath      string
 	PublicURL   string
 	OfflineWait time.Duration
 	MaxNodes    int
@@ -41,10 +42,27 @@ type Config struct {
 
 type Server struct {
 	cfg      Config
-	store    *Store
+	store    dataStore
 	http     *http.Server
 	sessions *SessionStore
 	cache    *ResponseCache
+}
+
+type dataStore interface {
+	SiteName() string
+	GetSettings() Settings
+	UpdateSettings(Settings) error
+	UpsertReport(agent.Metrics, int) error
+	AddPlannedNode(string, int) error
+	SetNodeToken(string, string, int) error
+	ValidNodeToken(string, string) bool
+	UpsertInfo(HostInfo) error
+	Delete(string) error
+	InfoList() []HostInfo
+	AkileHosts() []AkileHost
+	AdminNodes(time.Duration) []AdminNode
+	ExportNodes() NodeBackup
+	ImportNodes(NodeBackup, int) (int, error)
 }
 
 func New(cfg Config) (*Server, error) {
@@ -73,7 +91,7 @@ func New(cfg Config) (*Server, error) {
 	if cfg.MaxNodes == 0 {
 		cfg.MaxNodes = 2000
 	}
-	store, err := NewStore(cfg.DataPath)
+	store, err := newStoreBackend(cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -111,6 +129,39 @@ func New(cfg Config) (*Server, error) {
 		MaxHeaderBytes: 16 << 10,
 	}
 	return s, nil
+}
+
+func newStoreBackend(cfg Config) (dataStore, error) {
+	driver := strings.ToLower(strings.TrimSpace(cfg.StoreDriver))
+	if driver == "" && cfg.DBPath != "" {
+		driver = "sqlite"
+	}
+	if driver == "" {
+		driver = "json"
+	}
+	switch driver {
+	case "json", "file":
+		return NewStore(cfg.DataPath)
+	case "sqlite", "sqlite3":
+		dbPath := strings.TrimSpace(cfg.DBPath)
+		if dbPath == "" {
+			dbPath = defaultSQLitePath(cfg.DataPath)
+		}
+		return NewSQLiteStore(dbPath, cfg.DataPath)
+	default:
+		return nil, fmt.Errorf("unsupported STORE_DRIVER %q", cfg.StoreDriver)
+	}
+}
+
+func defaultSQLitePath(dataPath string) string {
+	if dataPath == "" {
+		return "data/server.db"
+	}
+	ext := filepath.Ext(dataPath)
+	if ext == "" {
+		return dataPath + ".db"
+	}
+	return strings.TrimSuffix(dataPath, ext) + ".db"
 }
 
 func (s *Server) handleAdminLogin(w http.ResponseWriter, r *http.Request) {
@@ -250,7 +301,10 @@ func (s *Server) handleAdminInstallCommand(w http.ResponseWriter, r *http.Reques
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	s.store.SetNodeToken(nodeID, hashToken(token))
+	if err := s.store.SetNodeToken(nodeID, hashToken(token), s.cfg.MaxNodes); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 	base := s.externalBase(r)
 	linux := fmt.Sprintf("curl -fsSL %s/install/agent-linux.sh | sudo sh -s -- --server %s --token %s --node-id %s", base, base, shellQuote(token), shellQuote(nodeID))
 	windows := fmt.Sprintf("powershell -ExecutionPolicy Bypass -Command \"[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; iwr %s/install/agent-windows.ps1 -UseBasicParsing | iex; Install-VpsAgent -Server '%s' -Token '%s' -NodeId '%s'\"", base, base, psQuote(token), psQuote(nodeID))
@@ -337,7 +391,7 @@ func (s *Server) handleAdminSettings(w http.ResponseWriter, r *http.Request) {
 	}
 	switch r.Method {
 	case http.MethodGet:
-		writeJSON(w, s.store.Settings)
+		writeJSON(w, s.store.GetSettings())
 	case http.MethodPost:
 		if !validAdminOrigin(r) {
 			http.Error(w, "invalid request origin", http.StatusForbidden)
@@ -353,7 +407,10 @@ func (s *Server) handleAdminSettings(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "invalid site_name", http.StatusBadRequest)
 			return
 		}
-		s.store.UpdateSettings(req)
+		if err := s.store.UpdateSettings(req); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
 		writeJSON(w, map[string]bool{"ok": true})
 	default:
 		methodNotAllowed(w)
@@ -383,7 +440,10 @@ func (s *Server) handleInfo(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "invalid node_id", http.StatusBadRequest)
 			return
 		}
-		s.store.UpsertInfo(req)
+		if err := s.store.UpsertInfo(req); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
 		writeJSON(w, map[string]string{"ok": "true"})
 	default:
 		methodNotAllowed(w)
@@ -414,7 +474,10 @@ func (s *Server) handleDelete(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid node_id", http.StatusBadRequest)
 		return
 	}
-	s.store.Delete(req.Name)
+	if err := s.store.Delete(req.Name); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 	s.cache.MarkDirty()
 	writeJSON(w, map[string]string{"ok": "true"})
 }
@@ -853,11 +916,21 @@ func (s *Store) SiteName() string {
 	return s.Settings.SiteName
 }
 
-func (s *Store) UpdateSettings(settings Settings) {
+func (s *Store) GetSettings() Settings {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	settings := s.Settings
+	if settings.SiteName == "" {
+		settings.SiteName = "Monitor Party"
+	}
+	return settings
+}
+
+func (s *Store) UpdateSettings(settings Settings) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.Settings = settings
-	s.saveLocked()
+	return s.saveLocked()
 }
 
 func (s *Store) UpsertReport(metrics agent.Metrics, maxNodes int) error {
@@ -870,8 +943,7 @@ func (s *Store) UpsertReport(metrics agent.Metrics, maxNodes int) error {
 	if _, ok := s.Planned[metrics.NodeID]; !ok {
 		s.Planned[metrics.NodeID] = PlannedNode{NodeID: metrics.NodeID, CreatedAt: time.Now().Unix()}
 	}
-	s.updateTrafficLocked(metrics)
-	return nil
+	return s.updateTrafficLocked(metrics)
 }
 
 func (s *Store) AddPlannedNode(nodeID string, maxNodes int) error {
@@ -881,13 +953,15 @@ func (s *Store) AddPlannedNode(nodeID string, maxNodes int) error {
 		return fmt.Errorf("max nodes reached")
 	}
 	s.Planned[nodeID] = PlannedNode{NodeID: nodeID, CreatedAt: time.Now().Unix()}
-	s.saveLocked()
-	return nil
+	return s.saveLocked()
 }
 
-func (s *Store) SetNodeToken(nodeID, tokenHash string) {
+func (s *Store) SetNodeToken(nodeID, tokenHash string, maxNodes int) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if _, exists := s.Planned[nodeID]; !exists && len(s.Planned) >= maxNodes {
+		return fmt.Errorf("max nodes reached")
+	}
 	planned := s.Planned[nodeID]
 	planned.NodeID = nodeID
 	if planned.CreatedAt == 0 {
@@ -895,7 +969,7 @@ func (s *Store) SetNodeToken(nodeID, tokenHash string) {
 	}
 	planned.TokenHash = tokenHash
 	s.Planned[nodeID] = planned
-	s.saveLocked()
+	return s.saveLocked()
 }
 
 func (s *Store) ValidNodeToken(nodeID, tokenHash string) bool {
@@ -908,24 +982,24 @@ func (s *Store) ValidNodeToken(nodeID, tokenHash string) bool {
 	return constantEqual(planned.TokenHash, tokenHash)
 }
 
-func (s *Store) UpsertInfo(info HostInfo) {
+func (s *Store) UpsertInfo(info HostInfo) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	info.AuthSecret = ""
 	info.TrafficResetDay = normalizeTrafficResetDay(info.TrafficResetDay)
 	s.Infos[info.Name] = info
 	s.syncTrafficResetDayLocked(info.Name, info.TrafficResetDay)
-	s.saveLocked()
+	return s.saveLocked()
 }
 
-func (s *Store) Delete(name string) {
+func (s *Store) Delete(name string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	delete(s.Reports, name)
 	delete(s.Planned, name)
 	delete(s.Infos, name)
 	delete(s.Traffic, name)
-	s.saveLocked()
+	return s.saveLocked()
 }
 
 func (s *Store) InfoList() []HostInfo {
@@ -1052,12 +1126,14 @@ func (s *Store) ImportNodes(backup NodeBackup, maxNodes int) (int, error) {
 		imported++
 	}
 	if imported > 0 {
-		s.saveLocked()
+		if err := s.saveLocked(); err != nil {
+			return imported, err
+		}
 	}
 	return imported, nil
 }
 
-func (s *Store) updateTrafficLocked(metrics agent.Metrics) {
+func (s *Store) updateTrafficLocked(metrics agent.Metrics) error {
 	now := time.Now()
 	resetDay := normalizeTrafficResetDay(s.Infos[metrics.NodeID].TrafficResetDay)
 	stat := s.Traffic[metrics.NodeID]
@@ -1065,8 +1141,7 @@ func (s *Store) updateTrafficLocked(metrics agent.Metrics) {
 		start, next := trafficPeriod(now, resetDay)
 		stat = TrafficStat{ResetDay: resetDay, PeriodStart: start.Unix(), NextReset: next.Unix(), LastRxBytes: metrics.Network.RxBytes, LastTxBytes: metrics.Network.TxBytes, UpdatedAt: now.Unix()}
 		s.Traffic[metrics.NodeID] = stat
-		s.saveTrafficLocked(false, now)
-		return
+		return s.saveTrafficLocked(false, now)
 	}
 	if stat.ResetDay != resetDay {
 		stat.ResetDay = resetDay
@@ -1083,8 +1158,7 @@ func (s *Store) updateTrafficLocked(metrics agent.Metrics) {
 		stat.LastTxBytes = metrics.Network.TxBytes
 		stat.UpdatedAt = now.Unix()
 		s.Traffic[metrics.NodeID] = stat
-		s.saveTrafficLocked(true, now)
-		return
+		return s.saveTrafficLocked(true, now)
 	}
 	if metrics.Network.RxBytes >= stat.LastRxBytes {
 		stat.RxTotal += metrics.Network.RxBytes - stat.LastRxBytes
@@ -1096,7 +1170,7 @@ func (s *Store) updateTrafficLocked(metrics agent.Metrics) {
 	stat.LastTxBytes = metrics.Network.TxBytes
 	stat.UpdatedAt = now.Unix()
 	s.Traffic[metrics.NodeID] = stat
-	s.saveTrafficLocked(resetHappened, now)
+	return s.saveTrafficLocked(resetHappened, now)
 }
 
 func (s *Store) syncTrafficResetDayLocked(nodeID string, resetDay int) {
@@ -1116,12 +1190,12 @@ func (s *Store) syncTrafficResetDayLocked(nodeID string, resetDay int) {
 	s.Traffic[nodeID] = stat
 }
 
-func (s *Store) saveTrafficLocked(force bool, now time.Time) {
+func (s *Store) saveTrafficLocked(force bool, now time.Time) error {
 	if !force && !s.lastTrafficSave.IsZero() && now.Sub(s.lastTrafficSave) < time.Minute {
-		return
+		return nil
 	}
 	s.lastTrafficSave = now
-	s.saveLocked()
+	return s.saveLocked()
 }
 
 func normalizeTrafficResetDay(day int) int {
@@ -1163,22 +1237,21 @@ func daysInMonth(year int, month time.Month, loc *time.Location) int {
 	return time.Date(year, month+1, 0, 0, 0, 0, 0, loc).Day()
 }
 
-func (s *Store) saveLocked() {
+func (s *Store) saveLocked() error {
 	if s.path == "" {
-		return
+		return nil
 	}
 	if err := os.MkdirAll(filepath.Dir(s.path), 0755); err != nil {
-		log.Printf("save mkdir failed: %v", err)
-		return
+		return fmt.Errorf("save mkdir failed: %w", err)
 	}
 	data, err := json.MarshalIndent(s, "", "  ")
 	if err != nil {
-		log.Printf("save marshal failed: %v", err)
-		return
+		return fmt.Errorf("save marshal failed: %w", err)
 	}
 	if err := os.WriteFile(s.path, data, 0600); err != nil {
-		log.Printf("save failed: %v", err)
+		return fmt.Errorf("save failed: %w", err)
 	}
+	return nil
 }
 
 func toAkileHost(m agent.Metrics, traffic TrafficStat) AkileHost {

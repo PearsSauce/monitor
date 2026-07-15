@@ -79,6 +79,11 @@ ADMIN_USER="$(ask "Admin username" "admin")"
 ADMIN_PASS="$(ask_secret "Admin password (leave empty to generate)")"
 ADDR="$(ask "Listen address" ":3000")"
 MAX_NODES="$(ask "Max nodes" "2000")"
+STORE_DRIVER="$(ask "Storage driver (json/sqlite)" "json")"
+DB_PATH=""
+if [ "$STORE_DRIVER" = "sqlite" ]; then
+  DB_PATH="$(ask "SQLite DB path" "/var/lib/vps-monitor/server.db")"
+fi
 BIN_URL="$(ask "Binary download URL (empty for local file)" "")"
 
 GENERATED_AUTH_SECRET=0
@@ -133,6 +138,12 @@ PUBLIC_URL=$PUBLIC_URL
 DATA_PATH=/var/lib/vps-monitor/server.json
 MAX_NODES=$MAX_NODES
 EOF
+if [ -n "$STORE_DRIVER" ]; then
+  printf "STORE_DRIVER=%s\n" "$STORE_DRIVER" >>/etc/vps-monitor/server.env
+fi
+if [ -n "$DB_PATH" ]; then
+  printf "DB_PATH=%s\n" "$DB_PATH" >>/etc/vps-monitor/server.env
+fi
 chmod 600 /etc/vps-monitor/server.env
 
 cat >/etc/systemd/system/vps-server.service <<'EOF'

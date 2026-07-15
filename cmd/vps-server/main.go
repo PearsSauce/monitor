@@ -16,6 +16,8 @@ func main() {
 		AdminUser:   env("ADMIN_USER", "admin"),
 		AdminPass:   os.Getenv("ADMIN_PASS"),
 		DataPath:    env("DATA_PATH", "data/server.json"),
+		StoreDriver: os.Getenv("STORE_DRIVER"),
+		DBPath:      os.Getenv("DB_PATH"),
 		PublicURL:   os.Getenv("PUBLIC_URL"),
 		OfflineWait: envDuration("OFFLINE_WAIT", 60*time.Second),
 		MaxNodes:    envInt("MAX_NODES", 2000),

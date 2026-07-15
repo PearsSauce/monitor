@@ -6,6 +6,8 @@ ADMIN_USER="admin"
 ADMIN_PASS=""
 PUBLIC_URL=""
 BIN_URL=""
+STORE_DRIVER=""
+DB_PATH=""
 
 random_secret() {
   if command -v openssl >/dev/null 2>&1; then
@@ -27,6 +29,8 @@ while [ "$#" -gt 0 ]; do
     --admin-pass) ADMIN_PASS="$2"; shift 2 ;;
     --public-url) PUBLIC_URL="$2"; shift 2 ;;
     --bin-url) BIN_URL="$2"; shift 2 ;;
+    --store-driver) STORE_DRIVER="$2"; shift 2 ;;
+    --db-path) DB_PATH="$2"; shift 2 ;;
     *) echo "unknown option: $1" >&2; exit 2 ;;
   esac
 done
@@ -69,6 +73,12 @@ ADMIN_PASS=$ADMIN_PASS
 PUBLIC_URL=$PUBLIC_URL
 DATA_PATH=/var/lib/vps-monitor/server.json
 EOF
+if [ -n "$STORE_DRIVER" ]; then
+  printf "STORE_DRIVER=%s\n" "$STORE_DRIVER" >>/etc/vps-monitor/server.env
+fi
+if [ -n "$DB_PATH" ]; then
+  printf "DB_PATH=%s\n" "$DB_PATH" >>/etc/vps-monitor/server.env
+fi
 chmod 600 /etc/vps-monitor/server.env
 
 cat >/etc/systemd/system/vps-server.service <<'EOF'

@@ -22,6 +22,7 @@ sudo cp /var/lib/vps-monitor/server.json /var/lib/vps-monitor/server.json.bak.$(
 - Release 构建脚本改为低并发 `go build -p 1`，降低多平台编译时内存占用，并在构建失败时立即中断。
 - 新增每节点本周期流量统计，默认每月 1 号重置，后台可设置 1-31 号；小月没有对应日期时自动按当月最后一天重置。
 - 本周期上传/下载流量由中心端持久化到 `server.json`，节点或中心端重启后会继续保持统计。
+- 中心端新增 SQLite 存储 adapter，可通过 `STORE_DRIVER=sqlite` 启用；默认仍使用 `server.json`，首次启用 SQLite 时会从旧 JSON 数据文件自动导入。
 - Agent 新增系统/负载采集字段：真实主机名、发行版、内核、CPU 架构、虚拟化、CPU 型号、物理/逻辑核心、磁盘读写速率和进程数。
 - Server 将新增 Agent 字段透传到 WebSocket 的 `Host` / `State` 数据中，前台展开节点详情即可查看。
 - 前台详情页补充系统、内核、CPU、磁盘读写、进程、TCP / UDP、运行时长、数据更新时间等展示。
@@ -336,6 +337,15 @@ DATA_PATH=/var/lib/vps-monitor/server.json
 MAX_NODES=2000
 ```
 
+默认存储为 JSON 文件。如果要启用 SQLite：
+
+```env
+STORE_DRIVER=sqlite
+DB_PATH=/var/lib/vps-monitor/server.db
+```
+
+首次使用 SQLite 且数据库为空时，中心端会尝试从 `DATA_PATH` 指向的旧 `server.json` 自动导入节点、套餐、站点设置、token hash 和流量统计。
+
 修改后重启：
 
 ```bash
@@ -365,22 +375,29 @@ DISK_EXCLUDE_FS=tmpfs,devtmpfs,overlay,squashfs,proc,sysfs,cgroup,cgroup2
 
 ## 数据文件
 
-中心端默认数据文件：
+中心端默认 JSON 数据文件：
 
 ```text
 /var/lib/vps-monitor/server.json
 ```
 
-其中包含节点列表、上报数据、购买信息、站点设置和节点 token hash。建议升级前备份：
+其中包含节点列表、上报数据、购买信息、站点设置和节点 token hash。启用 SQLite 后，默认数据库文件建议使用：
+
+```text
+/var/lib/vps-monitor/server.db
+```
+
+升级或切换存储前建议备份：
 
 ```bash
 sudo cp /var/lib/vps-monitor/server.json /var/lib/vps-monitor/server.json.bak.$(date +%Y%m%d%H%M%S)
+sudo cp /var/lib/vps-monitor/server.db /var/lib/vps-monitor/server.db.bak.$(date +%Y%m%d%H%M%S) 2>/dev/null || true
 ```
 
 ## 流量统计
 
 - `累计接收 / 累计发送` 来自节点系统网卡累计字节数，表示该节点网卡总接收/发送流量，节点重启或网卡计数器重置后可能归零。
-- `本周期接收 / 本周期发送` 由中心端根据 Agent 每次上报的网卡累计值差额计算，并持久化到 `server.json`，节点或中心端重启后会继续累计。
+- `本周期接收 / 本周期发送` 由中心端根据 Agent 每次上报的网卡累计值差额计算，并持久化到当前中心端存储中，节点或中心端重启后会继续累计。
 - 每个节点默认每月 `1` 号重置本周期流量；可在后台节点编辑里设置 `1-31` 号作为流量重置日。
 - 如果设置的重置日超过当月天数，会自动使用当月最后一天，例如 31 号在 2 月会按 28/29 号重置。
 - 当节点重启导致网卡累计值变小，中心端会认为计数器重置，只更新基准值，不扣减本周期流量。
@@ -436,6 +453,19 @@ AUTH_SECRET=replace-with-strong-random-secret \
 ADMIN_USER=admin \
 ADMIN_PASS=replace-with-strong-random-password \
 PUBLIC_URL=http://127.0.0.1:3000 \
+DATA_PATH=./data/server.json \
+go run ./cmd/vps-server
+```
+
+本地使用 SQLite：
+
+```bash
+AUTH_SECRET=replace-with-strong-random-secret \
+ADMIN_USER=admin \
+ADMIN_PASS=replace-with-strong-random-password \
+PUBLIC_URL=http://127.0.0.1:3000 \
+STORE_DRIVER=sqlite \
+DB_PATH=./data/server.db \
 DATA_PATH=./data/server.json \
 go run ./cmd/vps-server
 ```
