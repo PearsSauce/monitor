@@ -128,6 +128,72 @@ func TestAdminMeRequiresGetAndReportsSession(t *testing.T) {
 	}
 }
 
+func TestAgentPingRequiresGetAndValidNodeToken(t *testing.T) {
+	s := newTestServer(t)
+	const nodeID = "CN-ping-001"
+	const token = "agent-token"
+	if err := s.store.SetNodeToken(nodeID, hashToken(token), s.cfg.MaxNodes); err != nil {
+		t.Fatal(err)
+	}
+
+	postReq := httptest.NewRequest(http.MethodPost, "https://monitor.example.com/api/agent/ping", nil)
+	postResp := httptest.NewRecorder()
+	s.handleAgentPing(postResp, postReq)
+	if postResp.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("post agent ping status = %d body = %s", postResp.Code, postResp.Body.String())
+	}
+
+	guestReq := httptest.NewRequest(http.MethodGet, "https://monitor.example.com/api/agent/ping", nil)
+	guestResp := httptest.NewRecorder()
+	s.handleAgentPing(guestResp, guestReq)
+	if guestResp.Code != http.StatusUnauthorized {
+		t.Fatalf("guest agent ping status = %d body = %s", guestResp.Code, guestResp.Body.String())
+	}
+
+	authedReq := httptest.NewRequest(http.MethodGet, "https://monitor.example.com/api/agent/ping", nil)
+	authedReq.Header.Set("X-Node-ID", " "+nodeID+" ")
+	authedReq.Header.Set("Authorization", "Bearer "+token)
+	authedResp := httptest.NewRecorder()
+	s.handleAgentPing(authedResp, authedReq)
+	if authedResp.Code != http.StatusOK {
+		t.Fatalf("authed agent ping status = %d body = %s", authedResp.Code, authedResp.Body.String())
+	}
+	var payload map[string]string
+	decodeJSONResponse(t, authedResp, &payload)
+	if payload["ok"] != "true" {
+		t.Fatalf("authed agent ping response = %#v", payload)
+	}
+}
+
+func TestValidNodeID(t *testing.T) {
+	tests := []struct {
+		name  string
+		value string
+		want  bool
+	}{
+		{name: "simple", value: "CN-node-001", want: true},
+		{name: "trim spaces", value: "  CN-node-001  ", want: true},
+		{name: "unicode", value: "\u9999\u6e2f\u8282\u70b9-01", want: true},
+		{name: "max length", value: strings.Repeat("a", 96), want: true},
+		{name: "empty", value: "", want: false},
+		{name: "spaces only", value: "   ", want: false},
+		{name: "too long", value: strings.Repeat("a", 97), want: false},
+		{name: "path separator", value: "CN/node", want: false},
+		{name: "newline", value: "CN\nnode", want: false},
+		{name: "shell metachar", value: "CN;node", want: false},
+		{name: "glob", value: "CN*node", want: false},
+		{name: "quote", value: "CN'node", want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := validNodeID(tt.value); got != tt.want {
+				t.Fatalf("validNodeID(%q) = %v, want %v", tt.value, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestAdminLogoutRequiresPostAndValidOrigin(t *testing.T) {
 	s := newTestServer(t)
 	token, err := s.sessions.Create()
