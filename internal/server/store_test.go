@@ -675,8 +675,37 @@ func TestWebSocketEndpointRequiresGetAndUpgrade(t *testing.T) {
 		t.Fatalf("plain get websocket body = %s", getResp.Body.String())
 	}
 
+	missingConnectionReq := httptest.NewRequest(http.MethodGet, "https://monitor.example.com/ws", nil)
+	missingConnectionReq.Header.Set("Upgrade", "websocket")
+	missingConnectionReq.Header.Set("Sec-WebSocket-Version", "13")
+	missingConnectionReq.Header.Set("Sec-WebSocket-Key", "dGhlIHNhbXBsZSBub25jZQ==")
+	missingConnectionResp := httptest.NewRecorder()
+	s.handleWS(missingConnectionResp, missingConnectionReq)
+	if missingConnectionResp.Code != http.StatusBadRequest {
+		t.Fatalf("missing connection websocket status = %d body = %s", missingConnectionResp.Code, missingConnectionResp.Body.String())
+	}
+	if !strings.Contains(missingConnectionResp.Body.String(), "missing websocket connection upgrade") {
+		t.Fatalf("missing connection websocket body = %s", missingConnectionResp.Body.String())
+	}
+
+	badVersionReq := httptest.NewRequest(http.MethodGet, "https://monitor.example.com/ws", nil)
+	badVersionReq.Header.Set("Upgrade", "websocket")
+	badVersionReq.Header.Set("Connection", "keep-alive, Upgrade")
+	badVersionReq.Header.Set("Sec-WebSocket-Version", "12")
+	badVersionReq.Header.Set("Sec-WebSocket-Key", "dGhlIHNhbXBsZSBub25jZQ==")
+	badVersionResp := httptest.NewRecorder()
+	s.handleWS(badVersionResp, badVersionReq)
+	if badVersionResp.Code != http.StatusBadRequest {
+		t.Fatalf("bad version websocket status = %d body = %s", badVersionResp.Code, badVersionResp.Body.String())
+	}
+	if !strings.Contains(badVersionResp.Body.String(), "unsupported websocket version") {
+		t.Fatalf("bad version websocket body = %s", badVersionResp.Body.String())
+	}
+
 	invalidKeyReq := httptest.NewRequest(http.MethodGet, "https://monitor.example.com/ws", nil)
 	invalidKeyReq.Header.Set("Upgrade", "websocket")
+	invalidKeyReq.Header.Set("Connection", "Upgrade")
+	invalidKeyReq.Header.Set("Sec-WebSocket-Version", "13")
 	invalidKeyReq.Header.Set("Sec-WebSocket-Key", "not-a-valid-key")
 	invalidKeyResp := httptest.NewRecorder()
 	s.handleWS(invalidKeyResp, invalidKeyReq)

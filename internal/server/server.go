@@ -1585,6 +1585,12 @@ func upgradeWebSocket(w http.ResponseWriter, r *http.Request) (net.Conn, *bufioW
 	if !strings.EqualFold(r.Header.Get("Upgrade"), "websocket") {
 		return nil, nil, errors.New("not websocket")
 	}
+	if !headerHasToken(r.Header.Get("Connection"), "upgrade") {
+		return nil, nil, errors.New("missing websocket connection upgrade")
+	}
+	if strings.TrimSpace(r.Header.Get("Sec-WebSocket-Version")) != "13" {
+		return nil, nil, errors.New("unsupported websocket version")
+	}
 	key := strings.TrimSpace(r.Header.Get("Sec-WebSocket-Key"))
 	if key == "" {
 		return nil, nil, errors.New("missing websocket key")
@@ -1616,6 +1622,15 @@ func upgradeWebSocket(w http.ResponseWriter, r *http.Request) (net.Conn, *bufioW
 type bufioWriter struct{ conn net.Conn }
 
 func (w *bufioWriter) Write(p []byte) (int, error) { return w.conn.Write(p) }
+
+func headerHasToken(header, token string) bool {
+	for _, part := range strings.Split(header, ",") {
+		if strings.EqualFold(strings.TrimSpace(part), token) {
+			return true
+		}
+	}
+	return false
+}
 
 func validWebSocketKey(key string) bool {
 	decoded, err := base64.StdEncoding.DecodeString(key)
