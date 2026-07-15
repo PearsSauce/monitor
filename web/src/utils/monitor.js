@@ -8,6 +8,20 @@ export const hostArea = (host) => {
   return String(host?.Host?.Name || '').slice(0, 2)
 }
 
+export const normalizeRegionCode = (value) => {
+  const code = String(value || '').trim().slice(0, 2).toUpperCase()
+  return code === 'UK' ? 'GB' : code
+}
+
+export const regionFlag = (value) => {
+  const code = normalizeRegionCode(value)
+  if (!/^[A-Z]{2}$/.test(code)) {
+    return ''
+  }
+  const base = 0x1F1E6
+  return String.fromCodePoint(...[...code].map((char) => base + char.charCodeAt(0) - 65))
+}
+
 export const hostOnlineStatus = (host, now, offlineWait) => {
   const timestamp = Number(host?.TimeStamp) || 0
   const waitSeconds = Number(offlineWait) || 60

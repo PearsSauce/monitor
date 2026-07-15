@@ -1,19 +1,20 @@
 <script setup>
-import {computed, onMounted, onUnmounted, provide, ref} from "vue";
+import {computed, defineAsyncComponent, onMounted, onUnmounted, provide, ref} from "vue";
 import moment from 'moment'
-import CPU from "@/components/CPU.vue";
-import Mem from "@/components/Mem.vue";
-import NetIn from "@/components/NetIn.vue";
-import NetOut from "@/components/NetOut.vue";
 import axios from "axios";
-import { Message } from "@arco-design/web-vue";
+import Message from "@arco-design/web-vue/es/message";
 import StatsCard from "@/components/StatsCard.vue";
 import {formatAgo, formatBytes, formatDateStamp, formatTimeStamp, formatUptime, formatUptimeZh, calculateRemainingDays} from '@/utils/utils'
-import {normalizeAPIURL, normalizeMonitorHosts} from '@/utils/monitor'
+import {normalizeAPIURL, normalizeMonitorHosts, regionFlag} from '@/utils/monitor'
 import HeaderLocale from "@/components/HeaderLocale.vue";
 import {useI18n} from "vue-i18n";
 
 const { t } = useI18n()
+
+const CPU = defineAsyncComponent(() => import("@/components/CPU.vue"))
+const Mem = defineAsyncComponent(() => import("@/components/Mem.vue"))
+const NetIn = defineAsyncComponent(() => import("@/components/NetIn.vue"))
+const NetOut = defineAsyncComponent(() => import("@/components/NetOut.vue"))
 
 const socketURL = ref('')
 const apiURL = ref('')
@@ -307,7 +308,7 @@ provide('handleChangeType', handleChangeType)
         {{$t('all-area')}}
       </div>
       <div class="area-tab-item" :class="selectArea === item ? 'is-active' : ''" v-for="(item, index) in area" :key="item" @click="handleSelectArea(item)">
-        <span :class="`flag-icon flag-icon-${item.replace('UK', 'GB').toLowerCase()}`" style="margin-right: 3px;"></span> {{item}}
+        <span v-if="regionFlag(item)" class="region-flag area-region-flag" aria-hidden="true">{{regionFlag(item)}}</span> {{item}}
       </div>
     </div>
     <StatsCard :type="type" :stats="stats" @handleChangeType="handleChangeType" />
@@ -315,7 +316,7 @@ provide('handleChangeType', handleChangeType)
       <div class="monitor-item" :class="selectHost === item.Host.Name ? 'is-active' : ''" v-for="(item, index) in hosts" @click="handleSelectHost(item.Host.Name)" :key="index">
         <div class="name">
           <div class="title">
-            <span :class="`flag-icon flag-icon-${item.Host.Name.slice(0, 2).replace('UK', 'GB').toLowerCase()}`"></span>
+            <span v-if="regionFlag(item.Host.Name.slice(0, 2))" class="region-flag" aria-hidden="true">{{regionFlag(item.Host.Name.slice(0, 2))}}</span>
             {{item.Host.Name}}
           </div>
           <div class="status" :class="item.status ? 'online' : 'offline'">
@@ -592,6 +593,16 @@ a {
   }
 }
 
+.region-flag {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.4em;
+  line-height: 1;
+  vertical-align: -0.12em;
+  font-size: 14px;
+}
+
 .area-tabs {
   margin: 22px 14px 8px;
 
@@ -606,9 +617,9 @@ a {
     box-shadow: none;
     display: inline-block;
 
-    .flag-icon {
-      border-radius: 3px;
-      margin-top: -3px;
+    .area-region-flag {
+      margin-right: 3px;
+      margin-top: -2px;
     }
 
     &.is-active {
@@ -653,9 +664,8 @@ a {
 
     }
 
-    .flag-icon {
+    .region-flag {
       margin-right: 5px;
-      border-radius: 3px;
     }
 
     .monitor-item-title {
