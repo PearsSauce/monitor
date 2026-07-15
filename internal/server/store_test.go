@@ -1,9 +1,11 @@
 package server
 
 import (
+	"bytes"
 	"compress/gzip"
 	"encoding/json"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -747,6 +749,22 @@ func TestWebSocketAcceptMatchesRFCExample(t *testing.T) {
 	}
 }
 
+func TestReadWSRequiresMaskedClientFrames(t *testing.T) {
+	maskedFrame := []byte{0x81, 0x82, 0x01, 0x02, 0x03, 0x04, 'o' ^ 0x01, 'k' ^ 0x02}
+	payload, err := readWS(&bufferConn{Reader: bytes.NewReader(maskedFrame)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(payload) != "ok" {
+		t.Fatalf("masked frame payload = %q", string(payload))
+	}
+
+	_, err = readWS(&bufferConn{Reader: bytes.NewReader([]byte{0x81, 0x02, 'o', 'k'})})
+	if err == nil || !strings.Contains(err.Error(), "not masked") {
+		t.Fatalf("unmasked frame error = %v", err)
+	}
+}
+
 func TestStaticFallbackUsesIndexHeadersAndCompression(t *testing.T) {
 	s := newTestServer(t)
 
@@ -1146,3 +1164,20 @@ func sampleMetrics(nodeID string, rxBytes, txBytes uint64) agent.Metrics {
 		Processes: 5,
 	}
 }
+
+type bufferConn struct {
+	*bytes.Reader
+}
+
+func (c *bufferConn) Write(p []byte) (int, error)      { return len(p), nil }
+func (c *bufferConn) Close() error                     { return nil }
+func (c *bufferConn) LocalAddr() net.Addr              { return testAddr("local") }
+func (c *bufferConn) RemoteAddr() net.Addr             { return testAddr("remote") }
+func (c *bufferConn) SetDeadline(time.Time) error      { return nil }
+func (c *bufferConn) SetReadDeadline(time.Time) error  { return nil }
+func (c *bufferConn) SetWriteDeadline(time.Time) error { return nil }
+
+type testAddr string
+
+func (a testAddr) Network() string { return string(a) }
+func (a testAddr) String() string  { return string(a) }

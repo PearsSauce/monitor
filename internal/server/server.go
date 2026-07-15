@@ -1647,11 +1647,14 @@ func readWS(conn net.Conn) ([]byte, error) {
 	if _, err := io.ReadFull(conn, header); err != nil {
 		return nil, err
 	}
+	masked := header[1]&0x80 != 0
+	if !masked {
+		return nil, errors.New("websocket client frame not masked")
+	}
 	opcode := header[0] & 0x0f
 	if opcode == 8 {
 		return nil, io.EOF
 	}
-	masked := header[1]&0x80 != 0
 	length := uint64(header[1] & 0x7f)
 	if length == 126 {
 		buf := make([]byte, 2)
