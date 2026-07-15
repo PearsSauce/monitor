@@ -694,8 +694,16 @@ func (s *Server) agentAuthorized(r *http.Request) bool {
 	if !validNodeID(nodeID) {
 		return false
 	}
-	token := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
+	token := bearerToken(r.Header.Get("Authorization"))
 	return token != "" && s.store.ValidNodeToken(nodeID, hashToken(token))
+}
+
+func bearerToken(header string) string {
+	scheme, token, ok := strings.Cut(strings.TrimSpace(header), " ")
+	if !ok || !strings.EqualFold(scheme, "Bearer") {
+		return ""
+	}
+	return strings.TrimSpace(token)
 }
 
 func (s *Server) adminAuthorized(r *http.Request) bool {

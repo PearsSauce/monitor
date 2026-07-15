@@ -176,6 +176,44 @@ func TestAdminInstallCommandRequiresPostAndValidOrigin(t *testing.T) {
 	}
 }
 
+func TestAgentAuthorizationRequiresBearerToken(t *testing.T) {
+	s := newTestServer(t)
+	const nodeID = "CN-agent-001"
+	const token = "agent-token"
+	if err := s.store.SetNodeToken(nodeID, hashToken(token), 10); err != nil {
+		t.Fatal(err)
+	}
+
+	tests := []struct {
+		name       string
+		nodeID     string
+		auth       string
+		authorized bool
+	}{
+		{name: "valid bearer", nodeID: nodeID, auth: "Bearer " + token, authorized: true},
+		{name: "case-insensitive scheme", nodeID: nodeID, auth: "bearer " + token, authorized: true},
+		{name: "raw token rejected", nodeID: nodeID, auth: token},
+		{name: "wrong scheme rejected", nodeID: nodeID, auth: "Basic " + token},
+		{name: "empty bearer rejected", nodeID: nodeID, auth: "Bearer "},
+		{name: "wrong token rejected", nodeID: nodeID, auth: "Bearer wrong-token"},
+		{name: "missing node id rejected", auth: "Bearer " + token},
+		{name: "invalid node id rejected", nodeID: "bad/node", auth: "Bearer " + token},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "https://monitor.example.com/api/agent/ping", nil)
+			if tt.nodeID != "" {
+				req.Header.Set("X-Node-ID", tt.nodeID)
+			}
+			req.Header.Set("Authorization", tt.auth)
+			if got := s.agentAuthorized(req); got != tt.authorized {
+				t.Fatalf("authorized = %v, want %v", got, tt.authorized)
+			}
+		})
+	}
+}
+
 func TestStoreBackendsNodeLifecycle(t *testing.T) {
 	tests := []struct {
 		name    string
