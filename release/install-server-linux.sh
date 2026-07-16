@@ -16,7 +16,11 @@ ask() {
   else
     printf "%s: " "$prompt" >&2
   fi
-  read -r value
+  if [ -r /dev/tty ] && [ -w /dev/tty ]; then
+    IFS= read -r value </dev/tty || value=""
+  else
+    value=""
+  fi
   if [ -z "$value" ]; then value="$default"; fi
   printf "%s" "$value"
 }
@@ -24,10 +28,14 @@ ask() {
 ask_secret() {
   prompt="$1"
   printf "%s: " "$prompt" >&2
-  stty -echo 2>/dev/null || true
-  read -r value
-  stty echo 2>/dev/null || true
-  printf "\n" >&2
+  if [ -r /dev/tty ] && [ -w /dev/tty ]; then
+    stty -echo </dev/tty >/dev/tty 2>/dev/null || true
+    IFS= read -r value </dev/tty || value=""
+    stty echo </dev/tty >/dev/tty 2>/dev/null || true
+    printf "\n" >&2
+  else
+    value=""
+  fi
   printf "%s" "$value"
 }
 
@@ -62,6 +70,61 @@ find_binary() {
   return 1
 }
 
+need_arg() {
+  option="$1"
+  remaining="$2"
+  if [ "$remaining" -lt 2 ]; then
+    echo "$option requires a value" >&2
+    exit 2
+  fi
+}
+
+usage() {
+  cat >&2 <<'EOF'
+usage: install-server-linux.sh [options]
+
+Options:
+  --public-url URL
+  --auth-secret SECRET
+  --admin-user USER
+  --admin-pass PASSWORD
+  --addr ADDR
+  --max-nodes NUMBER
+  --cors-origins ORIGINS
+  --store-driver json|sqlite
+  --db-path PATH
+  --bin-url URL
+EOF
+}
+
+AUTH_SECRET=""
+ADMIN_USER=""
+ADMIN_PASS=""
+PUBLIC_URL=""
+ADDR=""
+MAX_NODES=""
+CORS_ORIGINS=""
+STORE_DRIVER=""
+DB_PATH=""
+BIN_URL=""
+
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --public-url) need_arg "$1" "$#"; PUBLIC_URL="$2"; shift 2 ;;
+    --auth-secret) need_arg "$1" "$#"; AUTH_SECRET="$2"; shift 2 ;;
+    --admin-user) need_arg "$1" "$#"; ADMIN_USER="$2"; shift 2 ;;
+    --admin-pass) need_arg "$1" "$#"; ADMIN_PASS="$2"; shift 2 ;;
+    --addr) need_arg "$1" "$#"; ADDR="$2"; shift 2 ;;
+    --max-nodes) need_arg "$1" "$#"; MAX_NODES="$2"; shift 2 ;;
+    --cors-origins) need_arg "$1" "$#"; CORS_ORIGINS="$2"; shift 2 ;;
+    --store-driver) need_arg "$1" "$#"; STORE_DRIVER="$2"; shift 2 ;;
+    --db-path) need_arg "$1" "$#"; DB_PATH="$2"; shift 2 ;;
+    --bin-url) need_arg "$1" "$#"; BIN_URL="$2"; shift 2 ;;
+    -h|--help) usage; exit 0 ;;
+    *) echo "unknown option: $1" >&2; usage; exit 2 ;;
+  esac
+done
+
 need_root
 
 ARCH="$(arch_name)"
@@ -73,19 +136,22 @@ fi
 echo "VPS Monitor center server installer"
 echo "detected: linux/$ARCH"
 
-PUBLIC_URL="$(ask "Public URL" "https://www.monitor.party")"
-AUTH_SECRET="$(ask_secret "Internal secret (leave empty to generate)")"
-ADMIN_USER="$(ask "Admin username" "admin")"
-ADMIN_PASS="$(ask_secret "Admin password (leave empty to generate)")"
-ADDR="$(ask "Listen address" ":3000")"
-MAX_NODES="$(ask "Max nodes" "2000")"
-CORS_ORIGINS="$(ask "Allowed CORS origins (comma-separated, empty for same-origin only)" "")"
-STORE_DRIVER="$(ask "Storage driver (json/sqlite)" "json")"
-DB_PATH=""
+if [ -z "$PUBLIC_URL" ]; then PUBLIC_URL="$(ask "Public URL" "https://www.monitor.party")"; fi
+if [ -z "$AUTH_SECRET" ]; then AUTH_SECRET="$(ask_secret "Internal secret (leave empty to generate)")"; fi
+if [ -z "$ADMIN_USER" ]; then ADMIN_USER="$(ask "Admin username" "admin")"; fi
+if [ -z "$ADMIN_PASS" ]; then ADMIN_PASS="$(ask_secret "Admin password (leave empty to generate)")"; fi
+if [ -z "$ADDR" ]; then ADDR="$(ask "Listen address" ":3000")"; fi
+if [ -z "$MAX_NODES" ]; then MAX_NODES="$(ask "Max nodes" "2000")"; fi
+if [ -z "$CORS_ORIGINS" ]; then CORS_ORIGINS="$(ask "Allowed CORS origins (comma-separated, empty for same-origin only)" "")"; fi
+if [ -z "$STORE_DRIVER" ]; then STORE_DRIVER="$(ask "Storage driver (json/sqlite)" "json")"; fi
+case "$STORE_DRIVER" in
+  json|sqlite) ;;
+  *) echo "unsupported storage driver: $STORE_DRIVER" >&2; exit 2 ;;
+esac
 if [ "$STORE_DRIVER" = "sqlite" ]; then
-  DB_PATH="$(ask "SQLite DB path" "/var/lib/vps-monitor/server.db")"
+  if [ -z "$DB_PATH" ]; then DB_PATH="$(ask "SQLite DB path" "/var/lib/vps-monitor/server.db")"; fi
 fi
-BIN_URL="$(ask "Binary download URL (empty for local file)" "")"
+if [ -z "$BIN_URL" ]; then BIN_URL="$(ask "Binary download URL (empty for local file)" "")"; fi
 
 GENERATED_AUTH_SECRET=0
 GENERATED_ADMIN_PASS=0
