@@ -346,6 +346,8 @@ STORE_DRIVER=sqlite
 DB_PATH=/var/lib/vps-monitor/server.db
 ```
 
+`DB_PATH` 必须是数据库文件路径，不要填写目录或站点根目录；生产环境建议保留在 `/var/lib/vps-monitor/` 下，例如 `/var/lib/vps-monitor/server.db`。
+
 首次使用 SQLite 且数据库为空时，中心端会尝试从 `DATA_PATH` 指向的旧 `server.json` 自动导入节点、套餐、站点设置、token hash 和流量统计。
 
 修改后重启：

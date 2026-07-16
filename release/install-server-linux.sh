@@ -97,6 +97,26 @@ Options:
 EOF
 }
 
+validate_sqlite_db_path() {
+  path="$1"
+  case "$path" in
+    /*) ;;
+    *) echo "SQLite DB path must be an absolute file path under /var/lib/vps-monitor" >&2; exit 2 ;;
+  esac
+  case "$path" in
+    */) echo "SQLite DB path must be a database file, not a directory: $path" >&2; exit 2 ;;
+  esac
+  if [ -d "$path" ]; then
+    echo "SQLite DB path must be a database file, not an existing directory: $path" >&2
+    exit 2
+  fi
+  case "$path" in
+    /var/lib/vps-monitor/*) ;;
+    *) echo "SQLite DB path must stay under /var/lib/vps-monitor because the systemd service only grants write access there" >&2; exit 2 ;;
+  esac
+  SQLITE_DB_DIR="${path%/*}"
+}
+
 AUTH_SECRET=""
 ADMIN_USER=""
 ADMIN_PASS=""
@@ -106,6 +126,7 @@ MAX_NODES=""
 CORS_ORIGINS=""
 STORE_DRIVER=""
 DB_PATH=""
+SQLITE_DB_DIR=""
 BIN_URL=""
 
 while [ "$#" -gt 0 ]; do
@@ -150,6 +171,7 @@ case "$STORE_DRIVER" in
 esac
 if [ "$STORE_DRIVER" = "sqlite" ]; then
   if [ -z "$DB_PATH" ]; then DB_PATH="$(ask "SQLite DB path" "/var/lib/vps-monitor/server.db")"; fi
+  validate_sqlite_db_path "$DB_PATH"
 fi
 if [ -z "$BIN_URL" ]; then BIN_URL="$(ask "Binary download URL (empty for local file)" "")"; fi
 
@@ -165,6 +187,9 @@ if is_weak_secret "$ADMIN_PASS"; then
 fi
 
 install -d /etc/vps-monitor /usr/local/bin /var/lib/vps-monitor
+if [ -n "$SQLITE_DB_DIR" ]; then
+  install -d "$SQLITE_DB_DIR"
+fi
 umask 077
 
 systemctl stop vps-server 2>/dev/null || true
