@@ -5,6 +5,10 @@ import {
   normalizeMonitorHosts,
   regionFlag
 } from '../src/utils/monitor.js'
+import {
+  DEFAULT_CHART_LOCALE,
+  normalizeChartLocale
+} from '../src/utils/chartLocale.js'
 
 const charts = {}
 const result = normalizeMonitorHosts([
@@ -74,3 +78,9 @@ assert.equal(regionFlag('UK-node-1'), '🇬🇧')
 
 const emptyResult = normalizeMonitorHosts({ bad: 'shape' }, 100, 10, {})
 assert.deepEqual(emptyResult, { areas: [], hosts: [] })
+
+assert.equal(normalizeChartLocale(''), DEFAULT_CHART_LOCALE)
+assert.equal(normalizeChartLocale('zh'), 'zh-CN')
+assert.equal(normalizeChartLocale('en'), 'en-US')
+assert.equal(normalizeChartLocale('en_US'), 'en-US')
+assert.equal(normalizeChartLocale('not a locale'), DEFAULT_CHART_LOCALE)

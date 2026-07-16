@@ -2,6 +2,7 @@
 import highcharts from 'highcharts'
 import moment from 'moment'
 import {onMounted, onUnmounted, ref, watch} from 'vue'
+import {configureHighcharts} from '@/utils/highcharts'
 
 const props = defineProps({
   data: {
@@ -94,7 +95,7 @@ const setSeriesData = (data) => {
 }
 
 onMounted(() => {
-  highcharts.setOptions({ global: { useUTC: false } });
+  configureHighcharts(highcharts)
   options.value.chart.renderTo = chartRef.value
   chart.value = highcharts.chart(options.value);
 })
