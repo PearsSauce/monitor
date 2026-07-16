@@ -37,34 +37,34 @@ https://你的域名
 
 Linux 中心端一键安装：
 ```bash
-curl -fsSL https://raw.githubusercontent.com/dingdingpw/monitor/main/release/install-server-linux.sh | sudo sh -s -- --bin-url "https://raw.githubusercontent.com/dingdingpw/monitor/main/release/vps-server-linux-amd64"
+curl -fsSL https://github.com/PearsSauce/monitor/releases/latest/download/install-server-linux.sh | sudo sh -s -- --bin-url "https://github.com/PearsSauce/monitor/releases/latest/download/vps-server-linux-amd64"
 ```
 
 ARM64：
 ```bash
-https://raw.githubusercontent.com/dingdingpw/monitor/main/release/vps-server-linux-arm64
+https://github.com/PearsSauce/monitor/releases/latest/download/vps-server-linux-arm64
 ```
 
 ARMv7：
 
 ```bash
-https://raw.githubusercontent.com/dingdingpw/monitor/main/release/vps-server-linux-armv7
+https://github.com/PearsSauce/monitor/releases/latest/download/vps-server-linux-armv7
 ```
 
 386：
 
 ```bash
-https://raw.githubusercontent.com/dingdingpw/monitor/main/release/vps-server-linux-386
+https://github.com/PearsSauce/monitor/releases/latest/download/vps-server-linux-386
 ```
 
 带参数一次性安装，避免交互：
 ```bash
-curl -fsSL https://raw.githubusercontent.com/dingdingpw/monitor/main/release/install-server-linux.sh | sudo sh -s -- \
+curl -fsSL https://github.com/PearsSauce/monitor/releases/latest/download/install-server-linux.sh | sudo sh -s -- \
   --public-url "https://你的域名" \
   --admin-user "admin" \
   --admin-pass "你的后台密码" \
   --auth-secret "换成一串随机密钥" \
-  --bin-url "https://raw.githubusercontent.com/dingdingpw/monitor/main/release/vps-server-linux-amd64"
+  --bin-url "https://github.com/PearsSauce/monitor/releases/latest/download/vps-server-linux-amd64"
 ```
 
 安装完看状态：
@@ -81,7 +81,7 @@ $arch = if ($env:PROCESSOR_ARCHITECTURE -eq "ARM64") { "arm64" } elseif ($env:PR
 $installDir = "C:\Program Files\vps-monitor"
 $dataDir = "C:\ProgramData\vps-monitor"
 New-Item -ItemType Directory -Force -Path $installDir,$dataDir | Out-Null
-Invoke-WebRequest "https://raw.githubusercontent.com/dingdingpw/monitor/main/release/vps-server-windows-$arch.exe" -OutFile "$installDir\vps-server.exe" -UseBasicParsing
+Invoke-WebRequest "https://github.com/PearsSauce/monitor/releases/latest/download/vps-server-windows-$arch.exe" -OutFile "$installDir\vps-server.exe" -UseBasicParsing
 $env:ADDR = ":3000"
 $env:PUBLIC_URL = "https://你的域名"
 $env:AUTH_SECRET = [guid]::NewGuid().ToString("N") + [guid]::NewGuid().ToString("N")
@@ -92,7 +92,7 @@ $env:DATA_PATH = "$dataDir\server.json"
 ```
 如果你想后台开机自启，用这个一键安装为计划任务：
 ```bash
-$arch = if ($env:PROCESSOR_ARCHITECTURE -eq "ARM64") { "arm64" } elseif ($env:PROCESSOR_ARCHITECTURE -eq "x86" -and -not $env:PROCESSOR_ARCHITEW6432) { "386" } else { "amd64" }; $installDir = "C:\Program Files\vps-monitor"; $dataDir = "C:\ProgramData\vps-monitor"; New-Item -ItemType Directory -Force -Path $installDir,$dataDir | Out-Null; Invoke-WebRequest "https://raw.githubusercontent.com/dingdingpw/monitor/main/release/vps-server-windows-$arch.exe" -OutFile "$installDir\vps-server.exe" -UseBasicParsing; $secret = [guid]::NewGuid().ToString("N") + [guid]::NewGuid().ToString("N"); $run = "@`r`n`$env:ADDR=':3000'`r`n`$env:PUBLIC_URL='https://你的域名'`r`n`$env:AUTH_SECRET='$secret'`r`n`$env:ADMIN_USER='admin'`r`n`$env:ADMIN_PASS='你的后台密码'`r`n`$env:DATA_PATH='$dataDir\server.json'`r`n& '$installDir\vps-server.exe'`r`n"; Set-Content -Path "$installDir\run-server.ps1" -Value $run -Encoding UTF8; schtasks /Create /TN "vps-server" /TR "powershell.exe -ExecutionPolicy Bypass -File `"$installDir\run-server.ps1`"" /SC ONSTART /RL HIGHEST /F; schtasks /Run /TN "vps-server"
+$arch = if ($env:PROCESSOR_ARCHITECTURE -eq "ARM64") { "arm64" } elseif ($env:PROCESSOR_ARCHITECTURE -eq "x86" -and -not $env:PROCESSOR_ARCHITEW6432) { "386" } else { "amd64" }; $installDir = "C:\Program Files\vps-monitor"; $dataDir = "C:\ProgramData\vps-monitor"; New-Item -ItemType Directory -Force -Path $installDir,$dataDir | Out-Null; Invoke-WebRequest "https://github.com/PearsSauce/monitor/releases/latest/download/vps-server-windows-$arch.exe" -OutFile "$installDir\vps-server.exe" -UseBasicParsing; $secret = [guid]::NewGuid().ToString("N") + [guid]::NewGuid().ToString("N"); $run = "@`r`n`$env:ADDR=':3000'`r`n`$env:PUBLIC_URL='https://你的域名'`r`n`$env:AUTH_SECRET='$secret'`r`n`$env:ADMIN_USER='admin'`r`n`$env:ADMIN_PASS='你的后台密码'`r`n`$env:DATA_PATH='$dataDir\server.json'`r`n& '$installDir\vps-server.exe'`r`n"; Set-Content -Path "$installDir\run-server.ps1" -Value $run -Encoding UTF8; schtasks /Create /TN "vps-server" /TR "powershell.exe -ExecutionPolicy Bypass -File `"$installDir\run-server.ps1`"" /SC ONSTART /RL HIGHEST /F; schtasks /Run /TN "vps-server"
 ```
 
 ## 功能
